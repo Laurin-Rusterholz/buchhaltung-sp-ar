@@ -4,8 +4,9 @@ Umfassende Buchhaltungs-Webapp für Schweizer Vereine. Doppelte Buchhaltung,
 Schweizer Vereins-Kontenplan, Mitglieder-, Rechnungs- und Belegverwaltung,
 Bilanz und Erfolgsrechnung. Statische Webapp – kein Backend nötig.
 
-Persistenz und Datei-Uploads laufen direkt aus dem Browser gegen
-**Firebase Storage**. Deployment auf Netlify.
+Persistenz läuft direkt aus dem Browser gegen **Firebase Firestore**
+(strukturierte Daten – keine CORS-Probleme) und **Firebase Storage**
+(Belegdateien). Deployment auf Netlify.
 
 ## Funktionsumfang
 
@@ -41,67 +42,74 @@ Standardmodell `gemini-1.5-flash`. In den Einstellungen umschaltbar.
 ## Tech-Stack
 
 - **Frontend**: statisches HTML + ES-Module (kein Build-Step)
-- **Storage**: Firebase Storage (JSON-Dateien + Belege-Binärfiles)
+- **Daten**: Firebase Firestore (Collection `buchhaltung-sp-ar`)
+- **Belegdateien**: Firebase Storage (`buchhaltung-sp-ar/files/belege/`)
 - **Buchhaltungs-Engine**: rein im Browser (`public/js/accounting.js`)
+- **AI**: Gemini API direkt aus dem Browser (Key in LocalStorage)
 - **Deployment**: Netlify (nur statisches Hosting)
 
 ## Firebase einrichten
 
 Die App nutzt das Firebase-Projekt `jupidu-36804` (Konfiguration in
-`public/js/firebase.js`). Alle Daten liegen unter dem Namensraum
-`buchhaltung-sp-ar/` im Bucket – andere Apps im selben Projekt sind
-nicht betroffen.
+`public/js/firebase.js`). Alle Daten liegen unter der Firestore-Collection
+`buchhaltung-sp-ar` bzw. dem Storage-Ordner `buchhaltung-sp-ar/` – andere
+Apps im selben Projekt sind nicht betroffen.
 
-### 1. CORS auf dem Firebase Storage Bucket erlauben
+### 1. Firestore aktivieren
 
-Damit der Browser direkt auf den Bucket zugreifen darf, muss CORS
-konfiguriert sein. Mit `gsutil`:
+[Firebase Console → Firestore Database](https://console.firebase.google.com/project/jupidu-36804/firestore)
+öffnen und „Create database" klicken (Production mode, Region nach Wahl).
 
-```bash
-# cors.json
-[
-  {
-    "origin": ["https://DEINE-NETLIFY-DOMAIN.netlify.app", "http://localhost:8080"],
-    "method": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-    "responseHeader": ["Content-Type", "Content-Length", "x-goog-meta-foo"],
-    "maxAgeSeconds": 3600
-  }
-]
+### 2. Firestore Security Rules
 
-gsutil cors set cors.json gs://jupidu-36804.firebasestorage.app
-```
-
-### 2. Firebase Storage Security Rules
-
-Für den Start (öffentliches Lesen, anonymes Schreiben):
+Im Tab „Rules" einfügen und „Publish":
 
 ```
 rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /buchhaltung-sp-ar/{allPaths=**} {
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /buchhaltung-sp-ar/{docId} {
       allow read, write: if true;
     }
   }
 }
 ```
 
+### 3. Storage Rules für Belege
+
+Falls noch nicht offen, in Storage → Rules ergänzen:
+
+```
+match /buchhaltung-sp-ar/{allPaths=**} {
+  allow read, write: if true;
+}
+```
+
 **Achtung:** Diese Regeln machen alle Daten öffentlich lese- und
-beschreibbar. Für den Produktivbetrieb unbedingt mit Auth absichern
-(z.B. Firebase Auth + `request.auth != null`).
+beschreibbar. Für den Produktivbetrieb unbedingt mit Firebase Auth
+absichern (z.B. `if request.auth != null`).
 
-## Datenstruktur (Firebase Storage)
+## Datenstruktur
 
-| Pfad                                                   | Inhalt                       |
-|--------------------------------------------------------|------------------------------|
-| `buchhaltung-sp-ar/data/einstellungen.json`            | Vereinsstammdaten            |
-| `buchhaltung-sp-ar/data/kontenplan.json`               | Liste aller Konten           |
-| `buchhaltung-sp-ar/data/geschaeftsjahre.json`          | Liste der Geschäftsjahre     |
-| `buchhaltung-sp-ar/data/buchungen-<jahr>.json`         | Journal pro Geschäftsjahr    |
-| `buchhaltung-sp-ar/data/mitglieder.json`               | Mitgliederliste              |
-| `buchhaltung-sp-ar/data/rechnungen-<jahr>.json`        | Rechnungen pro Geschäftsjahr |
-| `buchhaltung-sp-ar/data/belege-meta.json`              | Metadaten aller Belege       |
-| `buchhaltung-sp-ar/files/belege/<id>-<dateiname>`      | Belegdatei (binär)           |
+### Firestore (Collection `buchhaltung-sp-ar`)
+
+| Document               | Inhalt                       |
+|------------------------|------------------------------|
+| `einstellungen`        | Vereinsstammdaten            |
+| `kontenplan`           | Liste aller Konten           |
+| `geschaeftsjahre`      | Liste der Geschäftsjahre     |
+| `buchungen-<jahr>`     | Journal pro Geschäftsjahr    |
+| `mitglieder`           | Mitgliederliste              |
+| `rechnungen-<jahr>`    | Rechnungen pro Geschäftsjahr |
+| `belege-meta`          | Metadaten aller Belege       |
+
+Jedes Dokument hat das Schema `{ data: <payload>, updated_at: timestamp }`.
+
+### Storage
+
+| Pfad                                              | Inhalt              |
+|---------------------------------------------------|---------------------|
+| `buchhaltung-sp-ar/files/belege/<id>-<dateiname>` | Belegdatei (binär)  |
 
 ## Lokal entwickeln
 

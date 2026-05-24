@@ -33,16 +33,15 @@ function readPersistedJahr() {
   return Number.isFinite(v) && v > 0 ? v : null;
 }
 
-function showCorsBanner() {
+function showSetupBanner(message) {
   if ($('#cors-banner')) return;
   const banner = document.createElement('div');
   banner.id = 'cors-banner';
   banner.className = 'cors-banner';
   banner.innerHTML = `
     <div>
-      <strong>⚠️ Firebase Storage CORS nicht konfiguriert.</strong>
-      Daten können nicht geladen werden, bis CORS auf dem Bucket
-      <code>jupidu-36804.firebasestorage.app</code> erlaubt ist.
+      <strong>⚠️ Firebase-Setup erforderlich.</strong>
+      ${message}
       <a href="#einstellungen">Setup-Anleitung →</a>
     </div>
     <button class="ghost sm" id="cors-banner-close">×</button>
@@ -91,8 +90,10 @@ async function bootstrap() {
     renderJahrSelect();
   } catch (err) {
     console.error(err);
-    if (err?.code === 'firebase/cors') {
-      showCorsBanner();
+    if (err?.code === 'firestore/disabled') {
+      showSetupBanner('Firestore ist im Projekt <code>jupidu-36804</code> noch nicht aktiviert.');
+    } else if (err?.code === 'firestore/permission' || err?.code === 'firestore/auth') {
+      showSetupBanner('Firestore Security Rules sperren den Zugriff.');
     } else {
       toast(`Initialisierung fehlgeschlagen: ${err.message}`, 'error');
     }

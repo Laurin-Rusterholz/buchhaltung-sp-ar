@@ -13,18 +13,14 @@ export default {
       e = { ...state.einstellungen };
     }
 
-    const corsCommand = `# cors.json (in einer Datei speichern)
-[
-  {
-    "origin": ["https://${location.host}", "http://localhost:8080"],
-    "method": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-    "responseHeader": ["Content-Type", "Cache-Control"],
-    "maxAgeSeconds": 3600
+    const firestoreRules = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /buchhaltung-sp-ar/{docId} {
+      allow read, write: if true;
+    }
   }
-]
-
-# Im Terminal mit gcloud / gsutil ausführen:
-gsutil cors set cors.json gs://jupidu-36804.firebasestorage.app`;
+}`;
 
     const storageRules = `rules_version = '2';
 service firebase.storage {
@@ -115,19 +111,34 @@ service firebase.storage {
       </div>
 
       <div class="card">
-        <h3>🔧 Firebase Storage Setup</h3>
+        <h3>🔧 Firebase-Setup</h3>
         <p class="muted small">
-          Damit der Browser direkt auf den Firebase-Bucket zugreifen darf,
-          muss CORS freigeschaltet sein. Einmaliger Setup pro Bucket.
+          Strukturierte Daten (Konten, Buchungen, Mitglieder, …) liegen in
+          <strong>Firestore</strong>, Belegdateien in <strong>Firebase Storage</strong>.
+          Setup ist einmalig pro Projekt.
         </p>
 
-        <h4>1. CORS auf dem Bucket erlauben</h4>
-        <pre style="background:#0f172a;color:#e2e8f0;padding:14px;border-radius:6px;overflow:auto;font-size:12px;line-height:1.5;"><code>${escapeHtml(corsCommand)}</code></pre>
-        <button id="copy-cors" class="sm mt-2">CORS-Konfig kopieren</button>
+        <h4>1. Firestore aktivieren</h4>
+        <ol class="muted small" style="padding-left:20px;line-height:1.7">
+          <li><a href="https://console.firebase.google.com/project/jupidu-36804/firestore" target="_blank" rel="noopener">Firebase Console → Firestore Database</a> öffnen.</li>
+          <li>Falls noch nicht aktiviert: <strong>„Create database"</strong> klicken.</li>
+          <li>Modus: <strong>Production mode</strong>, Region: <code>eur3 (europe-west)</code> (oder beliebig).</li>
+        </ol>
 
-        <h4>2. Storage Security Rules (in Firebase Console)</h4>
+        <h4>2. Firestore Security Rules</h4>
+        <p class="muted small">In der Firestore-Konsole → Tab <strong>„Rules"</strong> einfügen und Publish:</p>
+        <pre style="background:#0f172a;color:#e2e8f0;padding:14px;border-radius:6px;overflow:auto;font-size:12px;line-height:1.5;"><code>${escapeHtml(firestoreRules)}</code></pre>
+        <button id="copy-firestore-rules" class="sm mt-2">Firestore-Rules kopieren</button>
+
+        <h4 class="mt-4">3. Storage Security Rules (für Belege)</h4>
+        <p class="muted small">
+          Falls deine bestehenden Storage-Rules schon offen sind
+          (<code>match /{allPaths=**} { allow read, write: if true; }</code>),
+          ist nichts zu tun. Andernfalls in Storage → Rules ergänzen:
+        </p>
         <pre style="background:#0f172a;color:#e2e8f0;padding:14px;border-radius:6px;overflow:auto;font-size:12px;line-height:1.5;"><code>${escapeHtml(storageRules)}</code></pre>
-        <p class="muted small mt-2">
+
+        <p class="muted small mt-4">
           ⚠️ Diese Rules erlauben anonymen Zugriff. Für den Produktivbetrieb mit
           Firebase Authentication absichern.
         </p>
@@ -197,9 +208,9 @@ service firebase.storage {
       toast('Gemini Key entfernt', 'success');
     };
 
-    container.querySelector('#copy-cors').onclick = () => {
-      navigator.clipboard.writeText(corsCommand).then(
-        () => toast('CORS-Konfig in Zwischenablage', 'success'),
+    container.querySelector('#copy-firestore-rules').onclick = () => {
+      navigator.clipboard.writeText(firestoreRules).then(
+        () => toast('Firestore-Rules in Zwischenablage', 'success'),
         () => toast('Konnte nicht kopieren', 'error'),
       );
     };

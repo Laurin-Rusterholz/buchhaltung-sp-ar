@@ -1,5 +1,6 @@
-// Firebase-Initialisierung und Storage-Helpers
-// Speichert JSON-Daten und Belegdateien in Firebase Storage.
+// Firebase-Initialisierung:
+// - Firestore für strukturierte JSON-Daten (keine CORS-Probleme)
+// - Storage für Belegdateien (Upload via SDK, Anzeige via Link)
 
 const FIREBASE_CONFIG = {
   apiKey: 'AIzaSyC6xVo-wmXC4JjG7qMQnOExIJU-UDvBluE',
@@ -11,79 +12,107 @@ const FIREBASE_CONFIG = {
   measurementId: 'G-LT97CCT5DF',
 };
 
-// Namensraum: alle Daten dieser App liegen unter buchhaltung-sp-ar/
-// Bei Wiederverwendung des Buckets für andere Apps wichtig.
+// Namensraum: alle Daten dieser App liegen unter buchhaltung-sp-ar
+// (Firestore-Collection und Storage-Ordner).
 const NAMESPACE = 'buchhaltung-sp-ar';
 
+let _firestore = null;
 let _storage = null;
 
-export function initFirebase() {
-  if (_storage) return _storage;
+function ensureApp() {
   if (typeof firebase === 'undefined') {
     throw new Error('Firebase SDK nicht geladen (Adblocker?)');
   }
   if (!firebase.apps?.length) {
     firebase.initializeApp(FIREBASE_CONFIG);
   }
+}
+
+function initFirestore() {
+  if (_firestore) return _firestore;
+  ensureApp();
+  if (!firebase.firestore) {
+    throw new Error('Firestore SDK nicht geladen');
+  }
+  _firestore = firebase.firestore();
+  return _firestore;
+}
+
+function initStorage() {
+  if (_storage) return _storage;
+  ensureApp();
   _storage = firebase.storage();
   return _storage;
 }
 
-function dataPath(key) {
-  return `${NAMESPACE}/data/${key}.json`;
+// Firestore-Doc-IDs dürfen kein "/" enthalten
+function safeDocId(key) {
+  return String(key).replace(/\//g, '-');
 }
 
-function filePath(subpath) {
-  return `${NAMESPACE}/files/${subpath}`;
+function classifyFirestoreError(e) {
+  const code = e?.code || '';
+  if (code === 'permission-denied') {
+    const err = new Error('Firestore-Berechtigung fehlt. Security Rules in der Firebase Console freigeben.');
+    err.code = 'firestore/permission';
+    return err;
+  }
+  if (code === 'failed-precondition' || code === 'unimplemented') {
+    const err = new Error('Firestore ist im Projekt nicht aktiviert. In der Firebase Console → Build → Firestore aktivieren.');
+    err.code = 'firestore/disabled';
+    return err;
+  }
+  if (code === 'unauthenticated') {
+    const err = new Error('Firestore verlangt Authentifizierung. Security Rules prüfen.');
+    err.code = 'firestore/auth';
+    return err;
+  }
+  return e;
 }
 
+// === JSON Storage via Firestore ===
 export async function readJson(key, fallback = null) {
-  const storage = initFirebase();
   try {
-    const ref = storage.ref(dataPath(key));
-    const url = await ref.getDownloadURL();
-    // Cache-Buster, damit nach Schreiben sofort die neue Version geladen wird
-    const sep = url.includes('?') ? '&' : '?';
-    const res = await fetch(`${url}${sep}_=${Date.now()}`);
-    if (!res.ok) return fallback;
-    return await res.json();
+    const db = initFirestore();
+    const doc = await db.collection(NAMESPACE).doc(safeDocId(key)).get();
+    if (!doc.exists) return fallback;
+    const payload = doc.data();
+    if (!payload) return fallback;
+    return payload.data ?? fallback;
   } catch (e) {
-    if (e?.code === 'storage/object-not-found') return fallback;
-    // TypeError "Failed to fetch" deutet typischerweise auf CORS-Probleme hin
-    if (e instanceof TypeError && /fetch/i.test(e.message || '')) {
-      const err = new Error('Firebase Storage CORS nicht konfiguriert. Siehe Einstellungen → CORS-Setup.');
-      err.code = 'firebase/cors';
-      err.original = e;
-      throw err;
-    }
-    throw e;
+    throw classifyFirestoreError(e);
   }
 }
 
 export async function writeJson(key, data) {
-  const storage = initFirebase();
-  const ref = storage.ref(dataPath(key));
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  await ref.put(blob, {
-    contentType: 'application/json',
-    cacheControl: 'no-cache, no-store, must-revalidate',
-  });
-  return data;
-}
-
-export async function deleteJson(key) {
-  const storage = initFirebase();
   try {
-    await storage.ref(dataPath(key)).delete();
+    const db = initFirestore();
+    await db.collection(NAMESPACE).doc(safeDocId(key)).set({
+      data,
+      updated_at: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    return data;
   } catch (e) {
-    if (e?.code !== 'storage/object-not-found') throw e;
+    throw classifyFirestoreError(e);
   }
 }
 
+export async function deleteJson(key) {
+  try {
+    const db = initFirestore();
+    await db.collection(NAMESPACE).doc(safeDocId(key)).delete();
+  } catch (e) {
+    if (e?.code !== 'not-found') throw classifyFirestoreError(e);
+  }
+}
+
+// === Binary Files via Firebase Storage ===
 export async function uploadFile(subpath, file, onProgress) {
-  const storage = initFirebase();
-  const ref = storage.ref(filePath(subpath));
-  const task = ref.put(file, { contentType: file.type || 'application/octet-stream' });
+  const storage = initStorage();
+  const ref = storage.ref(`${NAMESPACE}/files/${subpath}`);
+  const task = ref.put(file, {
+    contentType: file.type || 'application/octet-stream',
+  });
   if (onProgress) {
     task.on('state_changed', (snap) => {
       onProgress(snap.bytesTransferred / snap.totalBytes);
@@ -95,9 +124,9 @@ export async function uploadFile(subpath, file, onProgress) {
 }
 
 export async function deleteFile(fullPath) {
-  const storage = initFirebase();
+  const storage = initStorage();
   try {
-    await storage.refFromURL(`gs://${FIREBASE_CONFIG.storageBucket}/${fullPath}`).delete();
+    await storage.ref(fullPath).delete();
   } catch (e) {
     if (e?.code !== 'storage/object-not-found') throw e;
   }
