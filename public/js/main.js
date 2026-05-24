@@ -7,6 +7,7 @@ import { toast } from './components.js';
 import { DEFAULT_EINSTELLUNGEN } from './defaults.js';
 
 import dashboard from './views/dashboard.js';
+import inbox from './views/inbox.js';
 import buchungen from './views/buchungen.js';
 import konten from './views/konten.js';
 import sektionen from './views/sektionen.js';
@@ -114,6 +115,7 @@ export async function reloadJahre() {
 
 // Routen registrieren
 register('dashboard', dashboard);
+register('inbox', inbox);
 register('buchungen', buchungen);
 register('konten', konten);
 register('sektionen', sektionen);

@@ -83,6 +83,21 @@ function fileToBase64(file) {
   });
 }
 
+// Lädt eine Datei von einer URL (z.B. Firebase Storage) und gibt Base64 + MIME zurück.
+async function urlToBase64(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Beleg-Download fehlgeschlagen: HTTP ${res.status}`);
+  const blob = await res.blob();
+  const mime = blob.type || 'application/octet-stream';
+  const data = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+  return { mime, data };
+}
+
 // === Buchungsvorschlag aus Beschreibung ===
 export async function suggestBuchung({ beschreibung, betrag, datum, konten }) {
   const list = konten
@@ -120,6 +135,22 @@ export async function analyzeBeleg(file, konten) {
   if (!file.type?.startsWith('image/') && file.type !== 'application/pdf') {
     throw new Error('Auto-Analyse nur für Bilder oder PDFs');
   }
+  const data = await fileToBase64(file);
+  return analyzeBelegInternal(file.type, data, konten);
+}
+
+// Gleiche Analyse, aber Beleg-Datei wird von einer URL geladen
+// (z.B. Firebase Storage URL aus dem sp-ar-belege Portal).
+// Liefert zusätzlich `faelligkeit` mit, falls auf dem Beleg erkennbar.
+export async function analyzeBelegFromUrl(url, konten) {
+  const { mime, data } = await urlToBase64(url);
+  if (!mime.startsWith('image/') && mime !== 'application/pdf') {
+    throw new Error(`Auto-Analyse nur für Bilder oder PDFs (erkannt: ${mime})`);
+  }
+  return analyzeBelegInternal(mime, data, konten);
+}
+
+async function analyzeBelegInternal(mimeType, base64Data, konten) {
   const aufwandErtrag = konten
     .filter((k) => k.typ === 'aufwand' || k.typ === 'ertrag')
     .map((k) => `${k.nummer} ${k.bezeichnung} [${k.typ}]`)
@@ -129,7 +160,6 @@ export async function analyzeBeleg(file, konten) {
     .map((k) => `${k.nummer} ${k.bezeichnung}`)
     .join('\n');
 
-  const data = await fileToBase64(file);
   const prompt = `Analysiere diesen Beleg und schlage eine vollständige Doppelbuchung vor.
 
 Regel:
@@ -138,7 +168,8 @@ Regel:
 
 Antworte AUSSCHLIESSLICH mit folgendem JSON, ohne Erklärung:
 {
-  "datum": "<YYYY-MM-DD>",
+  "datum": "<YYYY-MM-DD, Belegdatum>",
+  "faelligkeit": "<YYYY-MM-DD, Fälligkeitsdatum falls auf Beleg erkennbar (Zahlung bis…), sonst null>",
   "betrag": <Zahl in CHF, positiv>,
   "vendor": "<Verkäufer / Anbieter>",
   "beschreibung": "<kurze Beschreibung des Vorgangs>",
@@ -158,7 +189,7 @@ Verwende AUSSCHLIESSLICH Kontonummern aus den obigen Listen.`;
 
   const text = await callGemini([
     { text: prompt },
-    { inline_data: { mime_type: file.type, data } },
+    { inline_data: { mime_type: mimeType, data: base64Data } },
   ]);
   const result = extractJson(text);
   // Backward-Compat-Feld

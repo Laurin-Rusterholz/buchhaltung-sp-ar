@@ -2,7 +2,7 @@
 // Stellt die gleiche Schnittstelle bereit, die alle Views verwenden.
 
 import { readJson, writeJson, uploadFile, deleteFile } from './firebase.js';
-import { DEFAULT_EINSTELLUNGEN, DEFAULT_KONTENPLAN, DEFAULT_VORLAGEN } from './defaults.js';
+import { DEFAULT_EINSTELLUNGEN, DEFAULT_KONTENPLAN, DEFAULT_VORLAGEN, BELEG_PORTAL_URL } from './defaults.js';
 import { bilanz, erfolgsrechnung, kontoauszug } from './accounting.js';
 
 function uid(prefix = '') {
@@ -136,6 +136,9 @@ export const api = {
       haben: b.haben,
       betrag: Number(b.betrag),
       beleg_id: b.beleg_id || '',
+      bezahlt: b.bezahlt === true,
+      faellig_am: b.faellig_am || '',
+      externalBeleg: b.externalBeleg || null,
       erstellt_am: new Date().toISOString(),
     };
     list.push(buchung);
@@ -147,7 +150,11 @@ export const api = {
     const list = await api.listBuchungen(jahr);
     const idx = list.findIndex((x) => x.id === id);
     if (idx < 0) throw new Error('Buchung nicht gefunden');
-    list[idx] = { ...list[idx], ...b, id: list[idx].id, betrag: Number(b.betrag ?? list[idx].betrag) };
+    const merged = { ...list[idx], ...b, id: list[idx].id, betrag: Number(b.betrag ?? list[idx].betrag) };
+    if (b.bezahlt !== undefined) merged.bezahlt = b.bezahlt === true;
+    if (b.faellig_am !== undefined) merged.faellig_am = b.faellig_am || '';
+    if (b.externalBeleg !== undefined) merged.externalBeleg = b.externalBeleg || null;
+    list[idx] = merged;
     await writeJson(`buchungen-${jahr}`, list);
     return list[idx];
   },
@@ -157,6 +164,18 @@ export const api = {
     const newList = list.filter((x) => x.id !== id);
     await writeJson(`buchungen-${jahr}`, newList);
     return { ok: true };
+  },
+  // Findet eine Buchung anhand der externen Beleg-ID (sp-ar-belege Portal).
+  // Sucht über alle Geschäftsjahre.
+  findBuchungByExternalBelegId: async (spArId) => {
+    if (!spArId) return null;
+    const jahre = await readJson('geschaeftsjahre', []);
+    for (const j of jahre.sort((a, b) => b.jahr - a.jahr)) {
+      const list = await readJson(`buchungen-${j.jahr}`, []);
+      const found = list.find((b) => b.externalBeleg?.spArId === spArId);
+      if (found) return { buchung: found, jahr: j.jahr };
+    }
+    return null;
   },
 
   // ===== Sektionen =====
@@ -342,6 +361,50 @@ export const api = {
     const list = await api.listVorlagen();
     const newList = list.filter((x) => x.id !== id);
     await writeJson('vorlagen', newList);
+    return { ok: true };
+  },
+
+  // ===== Inbox (eingegangene Belege aus sp-ar-belege Portal) =====
+  // Holt alle Belege vom externen Portal (Netlify Function).
+  fetchPortalBelege: async () => {
+    const url = `${BELEG_PORTAL_URL}/.netlify/functions/beleg-list`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`Portal HTTP ${r.status}`);
+    const data = await r.json();
+    return Array.isArray(data.belege) ? data.belege : [];
+  },
+  // Markiert einen Beleg im Portal (Status / Buchungs-Referenz).
+  markPortalBeleg: async (spArId, payload) => {
+    const url = `${BELEG_PORTAL_URL}/.netlify/functions/beleg-list?action=mark`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: spArId, ...payload }),
+    });
+    if (!r.ok) {
+      let msg = `Portal mark fehlgeschlagen (${r.status})`;
+      try { const e = await r.json(); msg = e.error || msg; } catch {}
+      throw new Error(msg);
+    }
+    return r.json();
+  },
+  // Lokaler Inbox-State (Firestore): pro sp-ar-belege-ID ein Objekt mit
+  // KI-Analyse, Draft, Buchungs-Referenz.
+  getInboxState: () => readJson('inbox-state', {}),
+  saveInboxEntry: async (spArId, patch) => {
+    if (!spArId) throw new Error('spArId required');
+    const state = await api.getInboxState();
+    const current = state[spArId] || {};
+    state[spArId] = { ...current, ...patch, lastUpdated: new Date().toISOString() };
+    await writeJson('inbox-state', state);
+    return state[spArId];
+  },
+  deleteInboxEntry: async (spArId) => {
+    const state = await api.getInboxState();
+    if (state[spArId]) {
+      delete state[spArId];
+      await writeJson('inbox-state', state);
+    }
     return { ok: true };
   },
 

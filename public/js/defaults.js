@@ -21,6 +21,11 @@ export const DEFAULT_EINSTELLUNGEN = {
   konto_bank: '1020',
 };
 
+// URL des externen Beleg-Einreichungs-Portals (sp-ar-belege).
+// Wird in der Inbox-Seite verwendet, um eingereichte Belege abzurufen
+// und Status-Updates (verbucht/abgeschlossen) zurückzumelden.
+export const BELEG_PORTAL_URL = 'https://sp-ar-belege.netlify.app';
+
 // Kontenplan SP AR (aus offiziellem Kontenplan übernommen)
 export const DEFAULT_KONTENPLAN = [
   // === Aktiven ===
