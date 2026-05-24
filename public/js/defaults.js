@@ -19,6 +19,7 @@ export const DEFAULT_EINSTELLUNGEN = {
   konto_ergebnis: '',
   konto_sektionsbeitrag: '3001',
   konto_bank: '1020',
+  konto_forderungen: '1100',
 };
 
 // URL des externen Beleg-Einreichungs-Portals (sp-ar-belege).

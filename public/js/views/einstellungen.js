@@ -69,6 +69,7 @@ service firebase.storage {
           <div class="input-group"><label>Jahresergebnis-Konto</label><input name="konto_ergebnis" value="${escapeHtml(e.konto_ergebnis || '')}" placeholder="z.B. 2900" /></div>
           <div class="input-group"><label>Sektionsbeitrags-Konto</label><input name="konto_sektionsbeitrag" value="${escapeHtml(e.konto_sektionsbeitrag || '')}" placeholder="z.B. 3001" /></div>
           <div class="input-group"><label>Bank-Konto (Standard)</label><input name="konto_bank" value="${escapeHtml(e.konto_bank || '')}" placeholder="z.B. 1020" /></div>
+          <div class="input-group"><label>Forderungen-Konto</label><input name="konto_forderungen" value="${escapeHtml(e.konto_forderungen || '')}" placeholder="z.B. 1100" /></div>
         </div>
       </div>
 

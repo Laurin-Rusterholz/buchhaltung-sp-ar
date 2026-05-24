@@ -139,6 +139,7 @@ export const api = {
       bezahlt: b.bezahlt === true,
       faellig_am: b.faellig_am || '',
       externalBeleg: b.externalBeleg || null,
+      rechnungInfo: b.rechnungInfo || null,
       erstellt_am: new Date().toISOString(),
     };
     list.push(buchung);
@@ -154,6 +155,7 @@ export const api = {
     if (b.bezahlt !== undefined) merged.bezahlt = b.bezahlt === true;
     if (b.faellig_am !== undefined) merged.faellig_am = b.faellig_am || '';
     if (b.externalBeleg !== undefined) merged.externalBeleg = b.externalBeleg || null;
+    if (b.rechnungInfo !== undefined) merged.rechnungInfo = b.rechnungInfo || null;
     list[idx] = merged;
     await writeJson(`buchungen-${jahr}`, list);
     return list[idx];
@@ -257,6 +259,12 @@ export const api = {
       positionen: Array.isArray(r.positionen) ? r.positionen : [],
       total: Number(r.total || 0),
       status: r.status || 'offen',
+      // Buchungs-Referenzen (Forderung + Zahlung), werden automatisch gefüllt
+      forderungsBuchungId: r.forderungsBuchungId || null,
+      zahlungsBuchungId: r.zahlungsBuchungId || null,
+      bezahltAm: r.bezahltAm || null,
+      // Synchronisierung mit Quantus (via sp-ar-belege Bus)
+      quantusSynced: r.quantusSynced === true,
       erstellt_am: new Date().toISOString(),
     };
     list.push(rechnung);
@@ -362,6 +370,203 @@ export const api = {
     const newList = list.filter((x) => x.id !== id);
     await writeJson('vorlagen', newList);
     return { ok: true };
+  },
+
+  // ===== Rechnungs-Workflow (auto-Buchung + Quantus-Sync) =====
+  // Wird beim Erstellen einer Rechnung aufgerufen. Erstellt automatisch die
+  // Forderungsbuchung (Soll Forderung / Haben Ertrag) und meldet die Rechnung
+  // an das sp-ar-belege Portal (Quantus pollt von dort).
+  startRechnungsWorkflow: async (jahr, rechnung, options = {}) => {
+    const einst = await api.getEinstellungen();
+    const sollKonto = options.sollKonto || einst.konto_forderungen || '1100';
+    const habenKonto = options.habenKonto
+      || (rechnung.empfaenger_typ === 'sektion' ? (einst.konto_sektionsbeitrag || '3001') : (einst.konto_sektionsbeitrag || '3001'));
+
+    // 1. Forderungsbuchung erstellen
+    const forderung = await api.saveBuchung(jahr, {
+      datum: rechnung.datum,
+      beleg_nr: rechnung.nummer,
+      beschreibung: `Rechnung ${rechnung.nummer}: ${rechnung.empfaenger_name}${rechnung.beschreibung ? ' – ' + rechnung.beschreibung : ''}`,
+      soll: sollKonto,
+      haben: habenKonto,
+      betrag: rechnung.total,
+      bezahlt: false,
+      faellig_am: rechnung.faellig_am || '',
+      rechnungInfo: {
+        rechnungId: rechnung.id,
+        rechnungJahr: jahr,
+        rechnungNummer: rechnung.nummer,
+        typ: 'forderung',
+      },
+    });
+
+    // 2. Rechnung mit Buchungs-Referenz aktualisieren
+    await api.updateRechnung(jahr, rechnung.id, {
+      forderungsBuchungId: forderung.id,
+      quantusSynced: false,
+    });
+
+    // 3. An sp-ar-belege Portal melden (Quantus pollt von dort)
+    try {
+      const rechnungUrl = `${location.origin}${location.pathname}#rechnungen?id=${encodeURIComponent(rechnung.id)}`;
+      const url = `${BELEG_PORTAL_URL}/.netlify/functions/rechnung-submit`;
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: rechnung.id,
+          nummer: rechnung.nummer,
+          empfaenger_name: rechnung.empfaenger_name,
+          empfaenger_typ: rechnung.empfaenger_typ,
+          empfaenger_id: rechnung.empfaenger_id,
+          beschreibung: rechnung.beschreibung,
+          betrag: rechnung.total,
+          datum: rechnung.datum,
+          faellig_am: rechnung.faellig_am,
+          jahr,
+          buchungId: forderung.id,
+          buchungJahr: jahr,
+          rechnungUrl,
+        }),
+      });
+      if (r.ok) {
+        await api.updateRechnung(jahr, rechnung.id, { quantusSynced: true });
+      }
+    } catch (err) {
+      console.warn('Quantus-Sync fehlgeschlagen:', err);
+    }
+
+    return forderung;
+  },
+
+  // Sendet alle Rechnungen ans Portal, die beim Erstellen noch nicht
+  // synchronisiert werden konnten (Portal nicht erreichbar zu dem Zeitpunkt).
+  retrySyncRechnungen: async () => {
+    const jahre = await readJson('geschaeftsjahre', []);
+    let retried = 0;
+    for (const j of jahre) {
+      const list = await readJson(`rechnungen-${j.jahr}`, []);
+      for (const r of list) {
+        if (r.quantusSynced === true || r.status === 'bezahlt') continue;
+        if (!r.forderungsBuchungId) continue;
+        try {
+          const rechnungUrl = `${location.origin}${location.pathname}#rechnungen?id=${encodeURIComponent(r.id)}`;
+          const url = `${BELEG_PORTAL_URL}/.netlify/functions/rechnung-submit`;
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: r.id,
+              nummer: r.nummer,
+              empfaenger_name: r.empfaenger_name,
+              empfaenger_typ: r.empfaenger_typ,
+              empfaenger_id: r.empfaenger_id,
+              beschreibung: r.beschreibung,
+              betrag: r.total,
+              datum: r.datum,
+              faellig_am: r.faellig_am,
+              jahr: j.jahr,
+              buchungId: r.forderungsBuchungId,
+              buchungJahr: j.jahr,
+              rechnungUrl,
+            }),
+          });
+          if (res.ok) {
+            r.quantusSynced = true;
+            retried++;
+          }
+        } catch {}
+      }
+      if (retried > 0) await writeJson(`rechnungen-${j.jahr}`, list);
+    }
+    return { retried };
+  },
+
+  // Holt alle Rechnungs-Status aus dem Portal (Quantus hat dort "bezahlt"
+  // markiert, sobald der User die Aufgabe abgeschlossen hat) und erstellt
+  // bei jeder als bezahlt markierten Rechnung die Zahlungsbuchung
+  // (Soll Bank / Haben Forderung). Wird beim Öffnen der Rechnungen-View
+  // bzw. App-Start aufgerufen.
+  syncRechnungenFromPortal: async () => {
+    let processed = 0;
+    let portalRechnungen;
+    try {
+      const url = `${BELEG_PORTAL_URL}/.netlify/functions/rechnung-list`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`Portal HTTP ${r.status}`);
+      const data = await r.json();
+      portalRechnungen = Array.isArray(data.rechnungen) ? data.rechnungen : [];
+    } catch (err) {
+      console.warn('Rechnungs-Portal nicht erreichbar:', err);
+      return { processed: 0, error: err.message };
+    }
+    const einst = await api.getEinstellungen();
+    const bankKonto = einst.konto_bank || '1020';
+    const forderungsKonto = einst.konto_forderungen || '1100';
+
+    for (const portal of portalRechnungen) {
+      if (portal.status !== 'bezahlt') continue;
+      if (portal.zahlungVerbuchtAm) continue; // Bereits verbucht
+      const jahr = portal.buchungJahr || portal.jahr;
+      if (!jahr) continue;
+      const rechnungen = await api.listRechnungen(jahr);
+      const rechnung = rechnungen.find((r) => r.id === portal.id);
+      if (!rechnung) continue;
+      if (rechnung.zahlungsBuchungId) {
+        // Buchung schon vorhanden – nur Portal-Marker setzen
+        try {
+          await fetch(`${BELEG_PORTAL_URL}/.netlify/functions/rechnung-list?action=mark`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: portal.id, zahlungVerbuchtAm: new Date().toISOString() }),
+          });
+        } catch {}
+        continue;
+      }
+      try {
+        const zahlung = await api.saveBuchung(jahr, {
+          datum: (portal.bezahltAm || new Date().toISOString()).slice(0, 10),
+          beleg_nr: rechnung.nummer + '-Z',
+          beschreibung: `Zahlungseingang Rechnung ${rechnung.nummer}: ${rechnung.empfaenger_name}`,
+          soll: bankKonto,
+          haben: forderungsKonto,
+          betrag: rechnung.total,
+          bezahlt: true,
+          rechnungInfo: {
+            rechnungId: rechnung.id,
+            rechnungJahr: jahr,
+            rechnungNummer: rechnung.nummer,
+            typ: 'zahlung',
+          },
+        });
+        // Forderungsbuchung als bezahlt markieren
+        if (rechnung.forderungsBuchungId) {
+          await api.updateBuchung(jahr, rechnung.forderungsBuchungId, { bezahlt: true });
+        }
+        // Rechnung als bezahlt markieren
+        await api.updateRechnung(jahr, rechnung.id, {
+          status: 'bezahlt',
+          zahlungsBuchungId: zahlung.id,
+          bezahltAm: portal.bezahltAm || new Date().toISOString(),
+        });
+        // Portal-Marker setzen
+        try {
+          await fetch(`${BELEG_PORTAL_URL}/.netlify/functions/rechnung-list?action=mark`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: portal.id,
+              zahlungsBuchungId: zahlung.id,
+              zahlungVerbuchtAm: new Date().toISOString(),
+            }),
+          });
+        } catch {}
+        processed++;
+      } catch (err) {
+        console.warn('Zahlungsbuchung fehlgeschlagen für Rechnung', rechnung.nummer, err);
+      }
+    }
+    return { processed };
   },
 
   // ===== Inbox (eingegangene Belege aus sp-ar-belege Portal) =====

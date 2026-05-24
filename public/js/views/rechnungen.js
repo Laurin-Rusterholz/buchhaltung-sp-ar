@@ -11,8 +11,17 @@ const STATUS_BADGE = {
 };
 
 export default {
-  async render(container) {
+  async render(container, params = {}) {
     const jahr = state.aktuellesJahr;
+    // Erst Portal-Sync: prüfen ob in Quantus bereits Rechnungen als bezahlt
+    // markiert wurden → Zahlungsbuchungen werden dann automatisch erstellt.
+    try {
+      const result = await api.syncRechnungenFromPortal();
+      if (result.processed > 0) {
+        toast(`${result.processed} Zahlungseingang/-eingänge automatisch verbucht`, 'success');
+      }
+    } catch (err) { console.warn('Rechnungs-Sync fehlgeschlagen:', err); }
+
     let [rechnungen, sektionen] = await Promise.all([
       api.listRechnungen(jahr),
       api.listSektionen(),
@@ -104,6 +113,34 @@ export default {
 
     container.querySelector('#add').onclick = () => openForm();
     container.querySelector('#batch').onclick = () => openBatch();
+
+    // Deep-Link aus Quantus: #rechnungen?id=<id> öffnet die Rechnung direkt im Pop-up.
+    // Falls in einem anderen Jahr → durch alle Jahre suchen.
+    if (params?.id) {
+      let target = rechnungen.find((r) => r.id === params.id);
+      if (!target) {
+        // In anderen Jahren suchen
+        try {
+          const jahre = await api.listJahre();
+          for (const j of jahre.sort((a, b) => b.jahr - a.jahr)) {
+            if (j.jahr === jahr) continue;
+            const list = await api.listRechnungen(j.jahr);
+            const f = list.find((r) => r.id === params.id);
+            if (f) {
+              toast(`Rechnung liegt im Jahr ${j.jahr} – wechsle Jahr.`, 'info');
+              localStorage.setItem('aktuellesJahr', String(j.jahr));
+              location.reload();
+              return;
+            }
+          }
+        } catch {}
+      }
+      if (target) {
+        setTimeout(() => showInvoice(target), 100);
+      } else {
+        toast('Rechnung nicht gefunden', 'error');
+      }
+    }
 
     tbody.addEventListener('click', async (e) => {
       const editId = e.target?.dataset?.edit;
@@ -318,7 +355,7 @@ export default {
             // Aktuelle Liste neu lesen für korrekte Nummerierung in der Schleife
             const aktList = await api.listRechnungen(jahr);
             const nr = nextNummer(aktList, jahr);
-            await api.saveRechnung(jahr, {
+            const newRechnung = await api.saveRechnung(jahr, {
               nummer: nr,
               datum,
               faellig_am: faellig,
@@ -336,6 +373,12 @@ export default {
               total,
               status: 'offen',
             });
+            // Auto-Buchung + Quantus-Task
+            try {
+              await api.startRechnungsWorkflow(jahr, newRechnung);
+            } catch (wfErr) {
+              console.warn('Workflow-Fehler bei', s.name, wfErr);
+            }
             created++;
           } catch (err) {
             console.error('Batch-Fehler bei', s.name, err);
@@ -484,12 +527,23 @@ export default {
           toast('Nummer, Datum und Empfänger sind Pflicht', 'error'); return;
         }
         try {
-          if (isNew) await api.saveRechnung(jahr, data);
-          else await api.updateRechnung(jahr, rechnung.id, data);
+          if (isNew) {
+            const created = await api.saveRechnung(jahr, data);
+            // Automatisch Forderungsbuchung + Quantus-Task starten
+            try {
+              await api.startRechnungsWorkflow(jahr, created);
+              toast('Rechnung erstellt – Buchung + Quantus-Aufgabe automatisch angelegt', 'success');
+            } catch (wfErr) {
+              console.error(wfErr);
+              toast(`Rechnung gespeichert, Workflow-Fehler: ${wfErr.message}`, 'error');
+            }
+          } else {
+            await api.updateRechnung(jahr, rechnung.id, data);
+            toast('Gespeichert', 'success');
+          }
           md.close();
           rechnungen = await api.listRechnungen(jahr);
           renderRows();
-          toast('Gespeichert', 'success');
         } catch (err) { toast(err.message, 'error'); }
       };
     }
