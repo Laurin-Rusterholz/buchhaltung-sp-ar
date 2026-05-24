@@ -13,9 +13,9 @@ const STATUS_BADGE = {
 export default {
   async render(container) {
     const jahr = state.aktuellesJahr;
-    let [rechnungen, mitglieder] = await Promise.all([
+    let [rechnungen, sektionen] = await Promise.all([
       api.listRechnungen(jahr),
-      api.listMitglieder(),
+      api.listSektionen(),
     ]);
 
     const totals = {
@@ -168,11 +168,11 @@ export default {
         nummer: nextNummer(rechnungen, jahr),
         datum: todayIso(),
         faellig_am: '',
-        empfaenger_typ: 'mitglied',
+        empfaenger_typ: 'sektion',
         empfaenger_id: '',
         empfaenger_name: '',
         empfaenger_adresse: '',
-        beschreibung: '',
+        beschreibung: `Sektionsbeitrag ${jahr}`,
         positionen: [{ id: uid(), bezeichnung: '', menge: 1, preis: 0 }],
         status: 'offen',
       };
@@ -184,8 +184,9 @@ export default {
       });
 
       const draw = () => {
-        const optionsMitglieder = mitglieder
-          .map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.nachname)}, ${escapeHtml(m.vorname)}</option>`).join('');
+        const optionsSektionen = sektionen
+          .filter((s) => (s.status || 'aktiv') === 'aktiv')
+          .map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)} (${s.anzahl_mitglieder || 0} Mitglieder)</option>`).join('');
         md.bodyEl.innerHTML = `
           <div class="form-grid">
             <div class="input-group"><label>Rechnungs-Nr</label><input name="nummer" value="${escapeHtml(r.nummer)}" /></div>
@@ -201,13 +202,13 @@ export default {
             <div class="input-group"><label>Fällig am</label><input name="faellig_am" type="date" value="${escapeHtml(r.faellig_am || '')}" /></div>
             <div class="input-group"><label>Empfänger-Typ</label>
               <select name="empfaenger_typ">
-                <option value="mitglied" ${r.empfaenger_typ === 'mitglied' ? 'selected' : ''}>Mitglied</option>
+                <option value="sektion" ${r.empfaenger_typ === 'sektion' ? 'selected' : ''}>Sektion</option>
                 <option value="extern" ${r.empfaenger_typ === 'extern' ? 'selected' : ''}>Extern</option>
               </select>
             </div>
-            <div class="input-group" id="mitglied-wrap">
-              <label>Mitglied wählen</label>
-              <select name="empfaenger_id"><option value="">— wählen —</option>${optionsMitglieder}</select>
+            <div class="input-group" id="sektion-wrap">
+              <label>Sektion wählen</label>
+              <select name="empfaenger_id"><option value="">— wählen —</option>${optionsSektionen}</select>
             </div>
             <div class="input-group full"><label>Empfänger Name</label><input name="empfaenger_name" value="${escapeHtml(r.empfaenger_name || '')}" /></div>
             <div class="input-group full"><label>Empfänger Adresse</label><textarea name="empfaenger_adresse">${escapeHtml(r.empfaenger_adresse || '')}</textarea></div>
@@ -238,10 +239,24 @@ export default {
       md.bodyEl.addEventListener('change', (e) => {
         const t = e.target;
         if (t.name === 'empfaenger_id' && t.value) {
-          const sel = mitglieder.find((m) => m.id === t.value);
+          const sel = sektionen.find((s) => s.id === t.value);
           if (sel) {
-            md.bodyEl.querySelector('[name="empfaenger_name"]').value = `${sel.vorname} ${sel.nachname}`.trim();
-            md.bodyEl.querySelector('[name="empfaenger_adresse"]').value = `${sel.strasse || ''}\n${sel.plz || ''} ${sel.ort || ''}`.trim();
+            md.bodyEl.querySelector('[name="empfaenger_name"]').value = sel.name;
+            md.bodyEl.querySelector('[name="empfaenger_adresse"]').value = [
+              sel.kontakt_name,
+              sel.adresse,
+              `${sel.plz || ''} ${sel.ort || ''}`.trim(),
+            ].filter(Boolean).join('\n');
+            // Position automatisch ergänzen: Anzahl × Beitrag
+            if (sel.anzahl_mitglieder && sel.beitrag_pro_mitglied) {
+              const erste = r.positionen[0];
+              if (erste && !erste.bezeichnung) {
+                erste.bezeichnung = `Sektionsbeitrag ${jahr} (${sel.anzahl_mitglieder} Mitglieder × CHF ${sel.beitrag_pro_mitglied})`;
+                erste.menge = Number(sel.anzahl_mitglieder);
+                erste.preis = Number(sel.beitrag_pro_mitglied);
+                draw();
+              }
+            }
           }
         }
         const row = t.closest('tr[data-pos]');

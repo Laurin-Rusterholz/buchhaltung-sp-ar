@@ -159,45 +159,64 @@ export const api = {
     return { ok: true };
   },
 
-  // ===== Mitglieder =====
-  listMitglieder: () => readJson('mitglieder', []),
-  saveMitglied: async (m) => {
-    if (!m.vorname && !m.nachname) throw new Error('Vorname oder Nachname erforderlich');
-    const list = await api.listMitglieder();
-    const mitglied = {
-      id: uid('m-'),
-      nummer: m.nummer || String(list.length + 1).padStart(4, '0'),
-      vorname: m.vorname || '',
-      nachname: m.nachname || '',
-      strasse: m.strasse || '',
-      plz: m.plz || '',
-      ort: m.ort || '',
-      email: m.email || '',
-      telefon: m.telefon || '',
-      eintritt: m.eintritt || '',
-      austritt: m.austritt || '',
-      kategorie: m.kategorie || '',
-      beitrag: Number(m.beitrag || 0),
-      status: m.status || 'aktiv',
-      notizen: m.notizen || '',
+  // ===== Sektionen =====
+  listSektionen: () => readJson('sektionen', []),
+  saveSektion: async (s) => {
+    if (!s.name) throw new Error('Sektionsname ist Pflicht');
+    const list = await api.listSektionen();
+    const sektion = {
+      id: uid('s-'),
+      name: s.name,
+      kontakt_name: s.kontakt_name || '',
+      kontakt_email: s.kontakt_email || '',
+      adresse: s.adresse || '',
+      plz: s.plz || '',
+      ort: s.ort || '',
+      anzahl_mitglieder: Number(s.anzahl_mitglieder || 0),
+      beitrag_pro_mitglied: Number(s.beitrag_pro_mitglied || 0),
+      status: s.status || 'aktiv',
+      notizen: s.notizen || '',
       erstellt_am: new Date().toISOString(),
     };
-    list.push(mitglied);
-    await writeJson('mitglieder', list);
-    return mitglied;
+    list.push(sektion);
+    await writeJson('sektionen', list);
+    return sektion;
   },
-  updateMitglied: async (id, m) => {
-    const list = await api.listMitglieder();
+  updateSektion: async (id, s) => {
+    const list = await api.listSektionen();
     const idx = list.findIndex((x) => x.id === id);
-    if (idx < 0) throw new Error('Mitglied nicht gefunden');
-    list[idx] = { ...list[idx], ...m, id: list[idx].id, beitrag: Number(m.beitrag ?? list[idx].beitrag) };
-    await writeJson('mitglieder', list);
+    if (idx < 0) throw new Error('Sektion nicht gefunden');
+    list[idx] = {
+      ...list[idx],
+      ...s,
+      id: list[idx].id,
+      anzahl_mitglieder: Number(s.anzahl_mitglieder ?? list[idx].anzahl_mitglieder),
+      beitrag_pro_mitglied: Number(s.beitrag_pro_mitglied ?? list[idx].beitrag_pro_mitglied),
+    };
+    await writeJson('sektionen', list);
     return list[idx];
   },
-  deleteMitglied: async (id) => {
-    const list = await api.listMitglieder();
+  deleteSektion: async (id) => {
+    const list = await api.listSektionen();
     const newList = list.filter((x) => x.id !== id);
-    await writeJson('mitglieder', newList);
+    await writeJson('sektionen', newList);
+    return { ok: true };
+  },
+
+  // ===== Voranschlag / Budget =====
+  getBudget: async (jahr) => readJson(`budget-${jahr}`, null),
+  saveBudget: async (jahr, positionen, notizen = '') => {
+    const budget = {
+      jahr: Number(jahr),
+      positionen: Array.isArray(positionen) ? positionen : [],
+      notizen,
+      aktualisiert_am: new Date().toISOString(),
+    };
+    await writeJson(`budget-${jahr}`, budget);
+    return budget;
+  },
+  deleteBudget: async (jahr) => {
+    await writeJson(`budget-${jahr}`, null);
     return { ok: true };
   },
 

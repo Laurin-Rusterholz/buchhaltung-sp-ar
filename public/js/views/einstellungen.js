@@ -67,7 +67,7 @@ service firebase.storage {
         <div class="form-grid">
           <div class="input-group"><label>Eigenkapital-Konto</label><input name="konto_eigenkapital" value="${escapeHtml(e.konto_eigenkapital || '')}" placeholder="z.B. 2800" /></div>
           <div class="input-group"><label>Jahresergebnis-Konto</label><input name="konto_ergebnis" value="${escapeHtml(e.konto_ergebnis || '')}" placeholder="z.B. 2900" /></div>
-          <div class="input-group"><label>Mitgliederbeitrags-Konto</label><input name="konto_mitgliederbeitrag" value="${escapeHtml(e.konto_mitgliederbeitrag || '')}" placeholder="z.B. 3000" /></div>
+          <div class="input-group"><label>Sektionsbeitrags-Konto</label><input name="konto_sektionsbeitrag" value="${escapeHtml(e.konto_sektionsbeitrag || '')}" placeholder="z.B. 3001" /></div>
           <div class="input-group"><label>Bank-Konto (Standard)</label><input name="konto_bank" value="${escapeHtml(e.konto_bank || '')}" placeholder="z.B. 1020" /></div>
         </div>
       </div>
@@ -149,7 +149,7 @@ service firebase.storage {
     const STAMMDATEN_FELDER = [
       'name', 'untertitel', 'adresse', 'plz', 'ort', 'email', 'telefon', 'website', 'uid',
       'bank', 'iban', 'bic', 'qr_iban',
-      'konto_eigenkapital', 'konto_ergebnis', 'konto_mitgliederbeitrag', 'konto_bank',
+      'konto_eigenkapital', 'konto_ergebnis', 'konto_sektionsbeitrag', 'konto_bank',
     ];
     container.querySelector('#save-einstellungen').onclick = async () => {
       const data = {};

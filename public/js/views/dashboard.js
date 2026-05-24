@@ -5,10 +5,10 @@ import { formatChf, formatDate, escapeHtml } from '../utils.js';
 export default {
   async render(container) {
     const jahr = state.aktuellesJahr;
-    const [buchungen, konten, mitglieder, rechnungen, er, bilanz] = await Promise.all([
+    const [buchungen, konten, sektionen, rechnungen, er, bilanz] = await Promise.all([
       api.listBuchungen(jahr),
       api.listKonten(),
-      api.listMitglieder(),
+      api.listSektionen(),
       api.listRechnungen(jahr),
       api.erfolgsrechnung(jahr).catch(() => null),
       api.bilanz(jahr).catch(() => null),
@@ -50,8 +50,8 @@ export default {
           <div class="kpi-value ${ergebnis >= 0 ? 'positive' : 'negative'}">CHF ${formatChf(ergebnis)}</div>
         </div>
         <div class="kpi">
-          <div class="kpi-label">Mitglieder</div>
-          <div class="kpi-value">${mitglieder.filter((m) => m.status === 'aktiv').length}</div>
+          <div class="kpi-label">Sektionen / Mitglieder</div>
+          <div class="kpi-value">${sektionen.filter((s) => (s.status || 'aktiv') === 'aktiv').length} <span class="muted small">/ ${sektionen.filter((s) => (s.status || 'aktiv') === 'aktiv').reduce((sum, s) => sum + Number(s.anzahl_mitglieder || 0), 0)}</span></div>
         </div>
         <div class="kpi">
           <div class="kpi-label">Offene Rechnungen</div>

@@ -17,7 +17,7 @@ export const DEFAULT_EINSTELLUNGEN = {
   qr_iban: '',
   konto_eigenkapital: '2710',
   konto_ergebnis: '',
-  konto_mitgliederbeitrag: '3001',
+  konto_sektionsbeitrag: '3001',
   konto_bank: '1020',
 };
 
@@ -37,7 +37,7 @@ export const DEFAULT_KONTENPLAN = [
   { nummer: '2720', bezeichnung: 'Zweckgebunden Kantonsrat Fraktion', typ: 'passiv', kategorie: 'eigenkapital' },
 
   // === Erträge ===
-  { nummer: '3001', bezeichnung: 'Sektionsbeiträge', typ: 'ertrag', kategorie: 'mitgliederbeitraege' },
+  { nummer: '3001', bezeichnung: 'Sektionsbeiträge', typ: 'ertrag', kategorie: 'sektionsbeitraege' },
   { nummer: '3002', bezeichnung: 'Beiträge Mandatsträger:innen', typ: 'ertrag', kategorie: 'mitgliederbeitraege' },
   { nummer: '3003', bezeichnung: 'Diverse Zuwendungen von SP AR – Mitgliedern', typ: 'ertrag', kategorie: 'mitgliederbeitraege' },
   { nummer: '3201', bezeichnung: 'Spenden und Vergabungen (allgemein)', typ: 'ertrag', kategorie: 'spenden' },
@@ -113,64 +113,60 @@ export const KONTENPLAN_GENERIC = [
   { nummer: '6900', bezeichnung: 'Bankspesen', typ: 'aufwand', kategorie: 'finanz' },
 ];
 
-// Standard-Vorlagen für Dokumente und Mails
+// Standard-Vorlagen für Dokumente und Mails (Sektions-bezogen)
 export const DEFAULT_VORLAGEN = [
   {
-    id: 'v-mitgliederbeitrag',
-    name: 'Mitgliederbeitrag-Aufforderung',
+    id: 'v-sektionsbeitrag',
+    name: 'Sektionsbeitrag-Rechnung',
     typ: 'mail',
-    betreff: 'Mitgliederbeitrag {{jahr}} – {{verein_name}}',
-    inhalt: `Liebe:r {{vorname}}
+    betreff: 'Sektionsbeitrag {{jahr}} – {{verein_name}}',
+    inhalt: `Liebe Genoss:innen der {{sektion_name}}
 
-Vielen Dank für deine Mitgliedschaft bei der {{verein_name}}.
+Wir bitten euch um Überweisung des Sektionsbeitrags für das Jahr {{jahr}}.
 
-Der Mitgliederbeitrag für das Jahr {{jahr}} beträgt CHF {{beitrag}}.
-Wir bitten dich um Überweisung auf folgendes Konto:
+Anzahl Mitglieder: {{anzahl_mitglieder}}
+Beitrag pro Mitglied: CHF {{beitrag_pro_mitglied}}
+Total: CHF {{total_beitrag}}
 
+Zahlung auf:
 IBAN: {{verein_iban}}
 Bank: {{verein_bank}}
-Vermerk: Mitgliederbeitrag {{jahr}} – {{vorname}} {{nachname}}
+Vermerk: Sektionsbeitrag {{jahr}} – {{sektion_name}}
 
-Mit solidarischen Grüssen
-Vorstand {{verein_name}}`,
-  },
-  {
-    id: 'v-mahnung',
-    name: 'Mahnung Mitgliederbeitrag',
-    typ: 'mail',
-    betreff: 'Erinnerung: Mitgliederbeitrag {{jahr}}',
-    inhalt: `Liebe:r {{vorname}}
-
-Wir haben deinen Mitgliederbeitrag für {{jahr}} (CHF {{beitrag}}) noch nicht
-verbucht. Vielleicht ist es untergegangen – kein Problem.
-
-Du kannst den Betrag bequem auf folgendes Konto überweisen:
-IBAN: {{verein_iban}}
-Vermerk: Mitgliederbeitrag {{jahr}}
-
-Bei Fragen melde dich gerne.
+Bei Fragen meldet euch gerne.
 
 Solidarische Grüsse
 Vorstand {{verein_name}}`,
   },
   {
-    id: 'v-begruessung',
-    name: 'Begrüssung Neumitglied',
+    id: 'v-mahnung-sektion',
+    name: 'Mahnung Sektionsbeitrag',
     typ: 'mail',
-    betreff: 'Willkommen bei der {{verein_name}}',
-    inhalt: `Liebe:r {{vorname}}
+    betreff: 'Erinnerung: Sektionsbeitrag {{jahr}}',
+    inhalt: `Liebe Genoss:innen der {{sektion_name}}
 
-Wir freuen uns sehr, dich als neues Mitglied bei der {{verein_name}}
-begrüssen zu dürfen!
+Der Sektionsbeitrag {{jahr}} (CHF {{total_beitrag}} für {{anzahl_mitglieder}} Mitglieder) ist noch offen.
+Vielleicht ist es untergegangen – kein Problem.
 
-Du wirst in den nächsten Wochen Informationen zu unseren Aktivitäten,
-Veranstaltungen und Versammlungen erhalten.
-
-Dein Jahresbeitrag beträgt CHF {{beitrag}} und kann auf folgendes Konto
-überwiesen werden:
+Bitte überweist den Betrag bei Gelegenheit auf:
 IBAN: {{verein_iban}}
+Vermerk: Sektionsbeitrag {{jahr}}
 
-Herzlich willkommen!
+Bei Fragen meldet euch.
+
+Solidarische Grüsse
+Vorstand {{verein_name}}`,
+  },
+  {
+    id: 'v-info-sektionen',
+    name: 'Info-Mail an alle Sektionen',
+    typ: 'mail',
+    betreff: '[BITTE ANPASSEN] Info {{verein_name}}',
+    inhalt: `Liebe Genoss:innen der {{sektion_name}}
+
+[Inhalt anpassen]
+
+Solidarische Grüsse
 Vorstand {{verein_name}}`,
   },
   {
@@ -178,15 +174,15 @@ Vorstand {{verein_name}}`,
     name: 'Einladung Veranstaltung',
     typ: 'mail',
     betreff: '[BITTE ANPASSEN] Einladung Veranstaltung',
-    inhalt: `Liebe:r {{vorname}}
+    inhalt: `Liebe Genoss:innen der {{sektion_name}}
 
-Wir laden dich herzlich zu unserer Veranstaltung ein:
+Wir laden euch herzlich zu unserer Veranstaltung ein:
 
 [Datum:]
 [Ort:]
 [Programm:]
 
-Wir freuen uns auf dein Kommen.
+Wir freuen uns auf euer Kommen.
 
 Mit solidarischen Grüssen
 Vorstand {{verein_name}}`,

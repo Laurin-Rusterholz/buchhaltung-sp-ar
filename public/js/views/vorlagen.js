@@ -2,25 +2,21 @@
 
 import { api } from '../api.js';
 import { state } from '../main.js';
-import { escapeHtml, todayIso, currentYear } from '../utils.js';
+import { escapeHtml, currentYear } from '../utils.js';
 import { modal, toast, confirmDialog } from '../components.js';
 import { generateVorlage, hasApiKey } from '../ai.js';
 
 const VERFUEGBARE_PLATZHALTER = [
-  // Mitglied
-  { var: 'vorname', desc: 'Vorname' },
-  { var: 'nachname', desc: 'Nachname' },
-  { var: 'name', desc: 'Vorname + Nachname' },
-  { var: 'anrede', desc: 'Anrede (Frau / Herr)' },
-  { var: 'nummer', desc: 'Mitgliedsnummer' },
-  { var: 'strasse', desc: 'Strasse' },
-  { var: 'plz', desc: 'PLZ' },
-  { var: 'ort', desc: 'Ort' },
-  { var: 'email', desc: 'E-Mail' },
-  { var: 'telefon', desc: 'Telefon' },
-  { var: 'beitrag', desc: 'Jahresbeitrag CHF' },
-  { var: 'kategorie', desc: 'Mitgliedstyp' },
-  { var: 'eintritt', desc: 'Eintrittsdatum' },
+  // Sektion
+  { var: 'sektion_name', desc: 'Sektionsname' },
+  { var: 'kontakt_name', desc: 'Kontaktperson Sektion' },
+  { var: 'kontakt_email', desc: 'Kontakt-Email Sektion' },
+  { var: 'sektion_adresse', desc: 'Sektion-Adresse' },
+  { var: 'sektion_plz', desc: 'PLZ' },
+  { var: 'sektion_ort', desc: 'Ort' },
+  { var: 'anzahl_mitglieder', desc: 'Anzahl Mitglieder' },
+  { var: 'beitrag_pro_mitglied', desc: 'Beitrag pro Mitglied CHF' },
+  { var: 'total_beitrag', desc: 'Total Beitrag CHF' },
   // Verein
   { var: 'verein_name', desc: 'Vereinsname' },
   { var: 'verein_adresse', desc: 'Vereinsadresse' },
@@ -35,7 +31,7 @@ const VERFUEGBARE_PLATZHALTER = [
 export default {
   async render(container) {
     let vorlagen = await api.listVorlagen();
-    const mitglieder = await api.listMitglieder();
+    const sektionen = await api.listSektionen();
 
     container.innerHTML = `
       <div class="page-header">
@@ -48,11 +44,11 @@ export default {
 
       <div class="card">
         <p class="muted small">
-          Vorlagen unterstützen Platzhalter wie <code>{{vorname}}</code>,
-          <code>{{beitrag}}</code> etc. Beim Generieren wird ein Mitglied
-          gewählt – die Platzhalter werden ersetzt und das Ergebnis kann
-          per Mailclient versendet, in die Zwischenablage kopiert oder
-          gedruckt werden.
+          Vorlagen unterstützen Platzhalter wie <code>{{sektion_name}}</code>,
+          <code>{{anzahl_mitglieder}}</code>, <code>{{total_beitrag}}</code>.
+          Beim Generieren wird eine Sektion gewählt – die Platzhalter werden
+          ersetzt und das Ergebnis kann per Mailclient versendet, kopiert
+          oder gedruckt werden.
         </p>
         <details class="mt-2">
           <summary class="muted small">Verfügbare Platzhalter anzeigen</summary>
@@ -120,14 +116,14 @@ export default {
         title: isNew ? 'Neue Vorlage' : `Vorlage "${v.name}" bearbeiten`,
         body: `
           <div class="form-grid">
-            <div class="input-group"><label>Name</label><input name="name" value="${escapeHtml(v.name)}" placeholder="z.B. Mitgliederbeitrag-Aufforderung" /></div>
+            <div class="input-group"><label>Name</label><input name="name" value="${escapeHtml(v.name)}" placeholder="z.B. Sektionsbeitrag-Rechnung" /></div>
             <div class="input-group"><label>Typ</label>
               <select name="typ">
                 <option value="mail" ${v.typ === 'mail' ? 'selected' : ''}>Mail</option>
                 <option value="brief" ${v.typ === 'brief' ? 'selected' : ''}>Brief / Dokument</option>
               </select>
             </div>
-            <div class="input-group full"><label>Betreff</label><input name="betreff" value="${escapeHtml(v.betreff)}" placeholder="z.B. Mitgliederbeitrag {{jahr}}" /></div>
+            <div class="input-group full"><label>Betreff</label><input name="betreff" value="${escapeHtml(v.betreff)}" placeholder="z.B. Sektionsbeitrag {{jahr}}" /></div>
             <div class="input-group full">
               <label>Inhalt</label>
               <textarea name="inhalt" rows="14" style="font-family: 'SF Mono', Menlo, monospace; font-size: 13px;">${escapeHtml(v.inhalt)}</textarea>
@@ -161,10 +157,10 @@ export default {
       const m = modal({
         title: '✨ AI-Vorlage erstellen',
         body: `
-          <p class="muted small">Beschreibe was die Vorlage erreichen soll.</p>
+          <p class="muted small">Beschreibe was die Vorlage erreichen soll. Die AI nutzt Sektions-Platzhalter.</p>
           <div class="input-group full">
             <label>Anforderung</label>
-            <textarea id="ai-input" rows="4" placeholder="z.B. Eine Erinnerungsmail an Mitglieder, die ihren Beitrag noch nicht überwiesen haben. Freundlicher Ton, mit Hinweis auf Zahlungsmöglichkeiten."></textarea>
+            <textarea id="ai-input" rows="4" placeholder="z.B. Erinnerungsmail an Sektionen, deren Sektionsbeitrag noch offen ist. Freundlicher Ton, mit Zahlungshinweis."></textarea>
           </div>
           <div id="ai-output" class="hidden"></div>
         `,
@@ -225,15 +221,15 @@ export default {
         body: `
           <div class="form-grid">
             <div class="input-group full">
-              <label>Empfänger:in wählen</label>
+              <label>Sektion wählen</label>
               <select id="empf">
-                <option value="">— Mitglied auswählen —</option>
-                ${mitglieder
-                  .filter((mit) => mit.status === 'aktiv' || !mit.status)
-                  .sort((a, b) => (a.nachname || '').localeCompare(b.nachname || ''))
-                  .map((mit) => `<option value="${escapeHtml(mit.id)}">${escapeHtml(mit.nachname)}, ${escapeHtml(mit.vorname)}${mit.email ? ' &lt;' + escapeHtml(mit.email) + '&gt;' : ''}</option>`)
+                <option value="">— Sektion auswählen —</option>
+                ${sektionen
+                  .filter((s) => (s.status || 'aktiv') === 'aktiv')
+                  .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                  .map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)} (${s.anzahl_mitglieder || 0} Mitglieder)</option>`)
                   .join('')}
-                ${mitglieder.length === 0 ? '<option disabled>Keine Mitglieder vorhanden</option>' : ''}
+                ${sektionen.length === 0 ? '<option disabled>Keine Sektionen vorhanden</option>' : ''}
               </select>
             </div>
           </div>
@@ -256,8 +252,8 @@ export default {
       const prevInhalt = m.bodyEl.querySelector('#prev-inhalt');
 
       const update = () => {
-        const mit = mitglieder.find((x) => x.id === empfSel.value);
-        const ctx = buildContext(mit, state.einstellungen);
+        const sek = sektionen.find((x) => x.id === empfSel.value);
+        const ctx = buildContext(sek, state.einstellungen);
         prevBetreff.value = substitute(vorlage.betreff || '', ctx);
         prevInhalt.value = substitute(vorlage.inhalt || '', ctx);
       };
@@ -276,8 +272,8 @@ export default {
       };
 
       m.footerEl.querySelector('#open-mail').onclick = () => {
-        const mit = mitglieder.find((x) => x.id === empfSel.value);
-        const to = mit?.email || '';
+        const sek = sektionen.find((x) => x.id === empfSel.value);
+        const to = sek?.kontakt_email || '';
         const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(prevBetreff.value)}&body=${encodeURIComponent(prevInhalt.value)}`;
         window.location.href = url;
       };
@@ -305,24 +301,21 @@ export default {
   },
 };
 
-function buildContext(mit, einst) {
+function buildContext(sek, einst) {
   const e = einst || {};
-  const m = mit || {};
+  const s = sek || {};
+  const total = Number(s.anzahl_mitglieder || 0) * Number(s.beitrag_pro_mitglied || 0);
   const heute = new Date();
   return {
-    vorname: m.vorname || '',
-    nachname: m.nachname || '',
-    name: `${m.vorname || ''} ${m.nachname || ''}`.trim(),
-    anrede: '',
-    nummer: m.nummer || '',
-    strasse: m.strasse || '',
-    plz: m.plz || '',
-    ort: m.ort || '',
-    email: m.email || '',
-    telefon: m.telefon || '',
-    beitrag: m.beitrag != null ? String(m.beitrag) : '',
-    kategorie: m.kategorie || '',
-    eintritt: m.eintritt || '',
+    sektion_name: s.name || '',
+    kontakt_name: s.kontakt_name || '',
+    kontakt_email: s.kontakt_email || '',
+    sektion_adresse: s.adresse || '',
+    sektion_plz: s.plz || '',
+    sektion_ort: s.ort || '',
+    anzahl_mitglieder: String(s.anzahl_mitglieder || 0),
+    beitrag_pro_mitglied: s.beitrag_pro_mitglied != null ? String(s.beitrag_pro_mitglied) : '',
+    total_beitrag: total.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     verein_name: e.name || '',
     verein_adresse: `${e.adresse || ''} ${e.plz || ''} ${e.ort || ''}`.trim(),
     verein_email: e.email || '',

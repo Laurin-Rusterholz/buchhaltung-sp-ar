@@ -9,11 +9,12 @@ import { DEFAULT_EINSTELLUNGEN } from './defaults.js';
 import dashboard from './views/dashboard.js';
 import buchungen from './views/buchungen.js';
 import konten from './views/konten.js';
-import mitglieder from './views/mitglieder.js';
+import sektionen from './views/sektionen.js';
 import rechnungen from './views/rechnungen.js';
 import belege from './views/belege.js';
 import vorlagen from './views/vorlagen.js';
 import berichte from './views/berichte.js';
+import voranschlag from './views/voranschlag.js';
 import geschaeftsjahre from './views/geschaeftsjahre.js';
 import einstellungen from './views/einstellungen.js';
 
@@ -115,10 +116,11 @@ export async function reloadJahre() {
 register('dashboard', dashboard);
 register('buchungen', buchungen);
 register('konten', konten);
-register('mitglieder', mitglieder);
+register('sektionen', sektionen);
 register('rechnungen', rechnungen);
 register('belege', belege);
 register('vorlagen', vorlagen);
+register('voranschlag', voranschlag);
 register('berichte', berichte);
 register('geschaeftsjahre', geschaeftsjahre);
 register('einstellungen', einstellungen);

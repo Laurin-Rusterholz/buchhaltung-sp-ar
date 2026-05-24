@@ -192,14 +192,15 @@ export async function generateVorlage(beschreibung, kontext = {}) {
 
 "${beschreibung}"
 
-Verwende folgende Platzhalter wo sinnvoll:
-- {{vorname}}, {{nachname}}, {{name}} – Empfänger:in
-- {{anrede}} – z.B. Frau/Herr (optional)
-- {{strasse}}, {{plz}}, {{ort}} – Adresse
-- {{email}}, {{telefon}}
-- {{nummer}} – Mitglieds-Nummer
-- {{beitrag}} – Jahresbeitrag CHF
-- {{kategorie}} – Mitgliedstyp
+Empfänger sind Sektionen einer politischen Partei. Verwende folgende
+Platzhalter wo sinnvoll:
+- {{sektion_name}} – Sektionsname (z.B. SP Herisau)
+- {{kontakt_name}} – Kontaktperson (z.B. Präsident:in)
+- {{kontakt_email}} – Kontakt-Email der Sektion
+- {{sektion_adresse}}, {{sektion_plz}}, {{sektion_ort}}
+- {{anzahl_mitglieder}} – Anzahl Mitglieder der Sektion
+- {{beitrag_pro_mitglied}} – CHF Beitrag pro Mitglied
+- {{total_beitrag}} – Total Sektionsbeitrag CHF
 - {{verein_name}}, {{verein_adresse}}, {{verein_iban}}, {{verein_bank}}
 - {{datum}}, {{jahr}}
 
@@ -216,6 +217,71 @@ Verwende die Du-Form, Schweizer Schreibweise (ss statt ß), gendergerecht
 
   const text = await callGemini([{ text: prompt }], { temperature: 0.6 });
   return extractJson(text);
+}
+
+// === Voranschlag / Budget aus Vorjahren generieren ===
+export async function generateVoranschlag({ jahr, konten, historie, sektionen, notizen }) {
+  const kontenText = konten
+    .filter((k) => k.typ === 'ertrag' || k.typ === 'aufwand')
+    .map((k) => `${k.nummer} ${k.bezeichnung} [${k.typ}]`)
+    .join('\n');
+
+  const histText = Object.entries(historie || {})
+    .map(([kontoNr, jahreData]) => {
+      const k = konten.find((x) => x.nummer === kontoNr);
+      const label = k ? `${k.nummer} ${k.bezeichnung}` : kontoNr;
+      const j = Object.entries(jahreData)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([y, betrag]) => `${y}: CHF ${Number(betrag).toFixed(2)}`)
+        .join(', ');
+      return `- ${label}: ${j}`;
+    })
+    .join('\n');
+
+  const sektionenText = (sektionen || [])
+    .filter((s) => s.status === 'aktiv' || !s.status)
+    .map((s) => `- ${s.name}: ${s.anzahl_mitglieder} Mitglieder × CHF ${s.beitrag_pro_mitglied} = CHF ${(s.anzahl_mitglieder * s.beitrag_pro_mitglied).toFixed(2)}`)
+    .join('\n') || '(keine Sektionen erfasst)';
+
+  const prompt = `Erstelle einen realistischen Voranschlag (Budget) für das Jahr ${jahr} für einen Schweizer politischen Verein (SP AR).
+
+Aktuelle Sektionsbeiträge:
+${sektionenText}
+
+Historische Ist-Werte pro Konto (CHF):
+${histText || '(keine Historie vorhanden)'}
+
+${notizen ? `Zusätzliche Hinweise vom Kassier:\n${notizen}\n` : ''}
+
+Verfügbare Ertrags- und Aufwandkonten:
+${kontenText}
+
+Berücksichtige:
+- Realistische Schätzung basierend auf Vorjahres-Trends
+- Inflation ca. 1-2% jährlich für laufende Kosten
+- Sektionsbeiträge: Summe aus obigen Sektionen
+- Falls keine Historie für ein Konto vorhanden ist: nur wenn typisch erwartbar, sonst weglassen
+- Markiere Einmaleffekte oder spezielle Schätzungen in der "begründung"
+
+Antworte AUSSCHLIESSLICH mit folgendem JSON-Format:
+{
+  "positionen": [
+    {"konto": "<Kontonummer>", "betrag": <Zahl>, "begruendung": "<kurze Erklärung>"}
+  ]
+}
+
+Verwende nur Kontonummern aus der obigen Liste. Betrag in CHF, positiv (Vorzeichen ergibt sich aus typ).`;
+
+  const text = await callGemini([{ text: prompt }], { temperature: 0.3 });
+  const result = extractJson(text);
+  if (!Array.isArray(result.positionen)) throw new Error('Antwort enthält keine positionen-Liste');
+  return result.positionen
+    .filter((p) => p.konto && p.betrag != null)
+    .map((p) => ({
+      konto: String(p.konto).trim(),
+      betrag: Math.round(Number(p.betrag) * 100) / 100,
+      notiz: String(p.begruendung || '').trim(),
+    }));
 }
 
 // === Test-Verbindung ===
