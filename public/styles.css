@@ -394,6 +394,59 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-size: 14px;
 }
 
+/* ============ CORS-Banner ============ */
+.cors-banner {
+  background: #fff3cd;
+  border-bottom: 1px solid #d97706;
+  color: #92400e;
+  padding: 10px 16px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.cors-banner code {
+  background: rgba(0, 0, 0, 0.08);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.cors-banner a {
+  color: #92400e;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+/* ============ AI / Gemini ============ */
+.btn.ai, button.ai {
+  background: linear-gradient(135deg, #6d28d9, #2563eb);
+  color: white;
+  border-color: transparent;
+}
+.btn.ai:hover, button.ai:hover {
+  background: linear-gradient(135deg, #5b21b6, #1d4ed8);
+}
+.ai-hint {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-top: 4px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.ai-result {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
 /* ============ Print ============ */
 @media print {
   .sidebar, .page-header .actions { display: none; }

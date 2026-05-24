@@ -1,6 +1,7 @@
 import { api } from '../api.js';
 import { escapeHtml, formatDate } from '../utils.js';
 import { modal, toast, confirmDialog } from '../components.js';
+import { analyzeBeleg, hasApiKey } from '../ai.js';
 
 export default {
   async render(container) {
@@ -80,6 +81,7 @@ export default {
             <div class="input-group full">
               <label>Datei (PDF, JPG, PNG, …)</label>
               <input name="file" type="file" />
+              ${hasApiKey() ? '<div class="ai-hint"><button type="button" class="ai sm" id="ai-analyze" disabled>✨ Automatisch analysieren</button><span id="ai-status" class="muted small">Datei wählen, dann analysieren</span></div>' : '<div class="ai-hint muted small">Auto-Analyse: Gemini Key in Einstellungen hinterlegen</div>'}
             </div>
             <div class="input-group full">
               <label>Bezeichnung</label>
@@ -88,6 +90,7 @@ export default {
             <div class="input-group"><label>Datum</label><input name="datum" type="date" value="${today}" /></div>
             <div class="input-group"><label>Tags (kommagetrennt)</label><input name="tags" placeholder="z.B. spesen, vorstand" /></div>
             <div class="input-group full">
+              <div id="ai-result" class="ai-result hidden"></div>
               <div id="upload-progress" class="muted small hidden">
                 Lädt hoch… <span id="upload-pct">0%</span>
               </div>
@@ -97,13 +100,54 @@ export default {
         footer: `<button data-cancel>Abbrechen</button><button class="primary" data-save>Hochladen</button>`,
       });
 
+      const fileInput = m.bodyEl.querySelector('[name="file"]');
       const progressEl = m.bodyEl.querySelector('#upload-progress');
       const pctEl = m.bodyEl.querySelector('#upload-pct');
       const saveBtn = m.footerEl.querySelector('[data-save]');
+      const aiBtn = m.bodyEl.querySelector('#ai-analyze');
+      const aiStatus = m.bodyEl.querySelector('#ai-status');
+      const aiResult = m.bodyEl.querySelector('#ai-result');
+
+      // AI-Analyse erst aktivieren, wenn Datei gewählt
+      fileInput.onchange = () => {
+        if (aiBtn) {
+          aiBtn.disabled = !fileInput.files?.[0];
+          aiStatus.textContent = fileInput.files?.[0] ? '' : 'Datei wählen, dann analysieren';
+        }
+      };
+
+      if (aiBtn) {
+        aiBtn.onclick = async () => {
+          const file = fileInput.files?.[0];
+          if (!file) return;
+          aiBtn.disabled = true;
+          aiStatus.textContent = 'Gemini analysiert…';
+          aiResult.classList.add('hidden');
+          try {
+            const konten = await api.listKonten();
+            const result = await analyzeBeleg(file, konten);
+            if (result.bezeichnung) m.bodyEl.querySelector('[name="bezeichnung"]').value = result.bezeichnung;
+            if (result.datum) m.bodyEl.querySelector('[name="datum"]').value = result.datum;
+            if (result.tags) m.bodyEl.querySelector('[name="tags"]').value = result.tags;
+            aiResult.classList.remove('hidden');
+            aiResult.innerHTML = `
+              <strong>Erkannt:</strong><br>
+              ${result.vendor ? `Anbieter: ${escapeHtml(result.vendor)}<br>` : ''}
+              ${result.betrag ? `Betrag: CHF ${escapeHtml(result.betrag)}<br>` : ''}
+              ${result.konto_vorschlag ? `Konto-Vorschlag: ${escapeHtml(result.konto_vorschlag)}<br>` : ''}
+              <span class="muted small">Felder wurden vorausgefüllt. Bei Erstellung der Buchung kannst du das Konto übernehmen.</span>
+            `;
+            aiStatus.textContent = '✓ analysiert';
+          } catch (err) {
+            aiStatus.textContent = `Fehler: ${err.message}`;
+            toast(err.message, 'error');
+          }
+          aiBtn.disabled = false;
+        };
+      }
 
       m.footerEl.querySelector('[data-cancel]').onclick = m.close;
       saveBtn.onclick = async () => {
-        const fileInput = m.bodyEl.querySelector('[name="file"]');
         const file = fileInput.files?.[0];
         if (!file) { toast('Bitte Datei wählen', 'error'); return; }
         if (file.size > 50 * 1024 * 1024) { toast('Datei zu gross (max. 50 MB)', 'error'); return; }

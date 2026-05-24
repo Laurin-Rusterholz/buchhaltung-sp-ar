@@ -69,6 +69,11 @@ export const api = {
     await writeJson('kontenplan', newList);
     return { ok: true };
   },
+  replaceKontenplan: async (konten) => {
+    if (!Array.isArray(konten)) throw new Error('konten muss ein Array sein');
+    await writeJson('kontenplan', konten);
+    return konten;
+  },
 
   // ===== Geschäftsjahre =====
   listJahre: () => readJson('geschaeftsjahre', []),

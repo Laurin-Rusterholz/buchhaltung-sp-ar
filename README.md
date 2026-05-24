@@ -11,15 +11,32 @@ Persistenz und Datei-Uploads laufen direkt aus dem Browser gegen
 
 - **Dashboard** – Kennzahlen, Kontostände, letzte Buchungen
 - **Kontenplan** – Schweizer Vereins-Standardkontenplan vorinstalliert, frei
-  erweiterbar
-- **Buchungen** – Doppelte Buchhaltung (Soll/Haben), Journal, Kontenblatt
+  erweiterbar; Zurücksetzen auf Standard / leer; ✨ AI-Kontenplan-Generator
+- **Buchungen** – Doppelte Buchhaltung (Soll/Haben), Journal, Kontenblatt;
+  ✨ AI-Buchungsvorschlag aus Beschreibung
 - **Mitglieder** – Stammdaten, Beitragskategorien, Status
 - **Rechnungen** – Rechnungsstellung an Mitglieder oder Externe, Statusverfolgung
-- **Belege** – Upload (PDF/Bild/etc., bis 50 MB) und Verknüpfung mit Buchungen
+- **Belege** – Upload (PDF/Bild/etc., bis 50 MB) und Verknüpfung mit Buchungen;
+  ✨ AI-Auto-Analyse von Quittungen (OCR via Gemini Vision)
 - **Berichte** – Bilanz, Erfolgsrechnung, Journal, Kontoauszug; Druck/PDF
   über Browser
 - **Geschäftsjahre** – Mehrjahresfähigkeit, Jahresabschluss
-- **Einstellungen** – Vereinsdaten, Logo, Standardkonten
+- **Einstellungen** – Vereinsdaten, Bankverbindung, Standardkonten, Gemini-Key,
+  Firebase-CORS-Setup
+
+## KI-Funktionen (Gemini)
+
+API-Key wird nur lokal im Browser (LocalStorage) abgelegt, geht nicht in
+Firebase. Key holen unter
+[aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+und in **Einstellungen → KI-Funktionen** eintragen. Verfügbar:
+
+- **Buchungsvorschlag**: aus der Beschreibung schlägt Gemini Soll/Haben/Betrag vor.
+- **Beleg-Auto-Analyse**: Quittung hochladen → Gemini liest Datum, Betrag,
+  Anbieter, Kontovorschlag.
+- **Kontenplan-Generator**: Verein beschreiben → angepasster Schweizer Kontenplan.
+
+Standardmodell `gemini-1.5-flash`. In den Einstellungen umschaltbar.
 
 ## Tech-Stack
 

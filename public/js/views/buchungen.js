@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import { state } from '../main.js';
 import { escapeHtml, formatChf, formatDate, todayIso, downloadFile, toCsv } from '../utils.js';
 import { modal, toast, confirmDialog } from '../components.js';
+import { suggestBuchung, hasApiKey } from '../ai.js';
 
 export default {
   async render(container) {
@@ -157,6 +158,7 @@ export default {
             <div class="input-group full">
               <label>Beschreibung</label>
               <input name="beschreibung" value="${escapeHtml(b.beschreibung)}" />
+              ${hasApiKey() ? '<div class="ai-hint"><button type="button" class="ai sm" data-ai-suggest>✨ Konten + Betrag vorschlagen</button><span id="ai-status" class="muted small"></span></div>' : '<div class="ai-hint muted small">AI-Vorschläge: Gemini Key in Einstellungen hinterlegen</div>'}
             </div>
             <div class="input-group">
               <label>Soll-Konto</label>
@@ -182,6 +184,36 @@ export default {
       m.bodyEl.querySelector('[name="soll"]').value = b.soll;
       m.bodyEl.querySelector('[name="haben"]').value = b.haben;
       m.bodyEl.querySelector('[name="beleg_id"]').value = b.beleg_id || '';
+
+      // AI-Vorschlag
+      const aiBtn = m.bodyEl.querySelector('[data-ai-suggest]');
+      if (aiBtn) {
+        const aiStatus = m.bodyEl.querySelector('#ai-status');
+        aiBtn.onclick = async () => {
+          const beschr = m.bodyEl.querySelector('[name="beschreibung"]').value.trim();
+          if (!beschr) { toast('Erst Beschreibung eingeben', 'error'); return; }
+          aiBtn.disabled = true;
+          aiStatus.textContent = '· denkt nach…';
+          try {
+            const aktBetrag = Number(m.bodyEl.querySelector('[name="betrag"]').value) || null;
+            const result = await suggestBuchung({
+              beschreibung: beschr,
+              betrag: aktBetrag,
+              datum: m.bodyEl.querySelector('[name="datum"]').value,
+              konten,
+            });
+            if (kontoMap.get(result.soll)) m.bodyEl.querySelector('[name="soll"]').value = result.soll;
+            if (kontoMap.get(result.haben)) m.bodyEl.querySelector('[name="haben"]').value = result.haben;
+            if (result.betrag) m.bodyEl.querySelector('[name="betrag"]').value = result.betrag;
+            if (result.beschreibung) m.bodyEl.querySelector('[name="beschreibung"]').value = result.beschreibung;
+            aiStatus.innerHTML = `· ${escapeHtml(result.begruendung || 'übernommen')}`;
+          } catch (err) {
+            aiStatus.textContent = `· Fehler: ${err.message}`;
+            toast(err.message, 'error');
+          }
+          aiBtn.disabled = false;
+        };
+      }
 
       m.footerEl.querySelector('[data-cancel]').onclick = m.close;
       m.footerEl.querySelector('[data-save]').onclick = async () => {

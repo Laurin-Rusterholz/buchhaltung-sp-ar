@@ -49,6 +49,13 @@ export async function readJson(key, fallback = null) {
     return await res.json();
   } catch (e) {
     if (e?.code === 'storage/object-not-found') return fallback;
+    // TypeError "Failed to fetch" deutet typischerweise auf CORS-Probleme hin
+    if (e instanceof TypeError && /fetch/i.test(e.message || '')) {
+      const err = new Error('Firebase Storage CORS nicht konfiguriert. Siehe Einstellungen → CORS-Setup.');
+      err.code = 'firebase/cors';
+      err.original = e;
+      throw err;
+    }
     throw e;
   }
 }
