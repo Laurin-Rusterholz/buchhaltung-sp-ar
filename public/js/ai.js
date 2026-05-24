@@ -185,6 +185,39 @@ typ muss exakt einer dieser Werte sein: "aktiv", "passiv", "ertrag", "aufwand".`
     }));
 }
 
+// === Mail-/Brief-Vorlage generieren ===
+export async function generateVorlage(beschreibung, kontext = {}) {
+  const vereinName = kontext.verein_name || 'der Verein';
+  const prompt = `Erstelle eine Mail-Vorlage für ${vereinName} basierend auf folgender Anforderung:
+
+"${beschreibung}"
+
+Verwende folgende Platzhalter wo sinnvoll:
+- {{vorname}}, {{nachname}}, {{name}} – Empfänger:in
+- {{anrede}} – z.B. Frau/Herr (optional)
+- {{strasse}}, {{plz}}, {{ort}} – Adresse
+- {{email}}, {{telefon}}
+- {{nummer}} – Mitglieds-Nummer
+- {{beitrag}} – Jahresbeitrag CHF
+- {{kategorie}} – Mitgliedstyp
+- {{verein_name}}, {{verein_adresse}}, {{verein_iban}}, {{verein_bank}}
+- {{datum}}, {{jahr}}
+
+Antworte AUSSCHLIESSLICH mit folgendem JSON, ohne weitere Erklärung:
+{
+  "name": "<Name der Vorlage>",
+  "typ": "mail",
+  "betreff": "<Betreff mit Platzhaltern>",
+  "inhalt": "<Inhalt mit Zeilenumbrüchen \\n und Platzhaltern>"
+}
+
+Verwende die Du-Form, Schweizer Schreibweise (ss statt ß), gendergerecht
+(z.B. "Liebe:r"). Halte den Ton freundlich aber sachlich.`;
+
+  const text = await callGemini([{ text: prompt }], { temperature: 0.6 });
+  return extractJson(text);
+}
+
 // === Test-Verbindung ===
 export async function testConnection() {
   const text = await callGemini([{ text: 'Antworte mit dem Wort: OK' }]);

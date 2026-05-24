@@ -109,6 +109,13 @@ export default {
 
     container.querySelector('#add-buchung').onclick = () => openForm();
 
+    // Falls eine vorbefüllte Buchung wartet (z.B. nach AI-Beleg-Analyse) → Formular öffnen
+    if (state.pendingBuchung) {
+      const pending = state.pendingBuchung;
+      state.pendingBuchung = null;
+      openForm(null, pending);
+    }
+
     tbody.addEventListener('click', async (e) => {
       const editId = e.target?.dataset?.edit;
       const deleteId = e.target?.dataset?.delete;
@@ -126,16 +133,16 @@ export default {
       }
     });
 
-    function openForm(buchung) {
+    function openForm(buchung, prefill) {
       const isNew = !buchung;
       const b = buchung || {
-        datum: todayIso(),
-        beleg_nr: '',
-        beschreibung: '',
-        soll: '',
-        haben: '',
-        betrag: '',
-        beleg_id: '',
+        datum: prefill?.datum || todayIso(),
+        beleg_nr: prefill?.beleg_nr || '',
+        beschreibung: prefill?.beschreibung || '',
+        soll: prefill?.soll || '',
+        haben: prefill?.haben || '',
+        betrag: prefill?.betrag || '',
+        beleg_id: prefill?.beleg_id || '',
       };
       const optionsKonten = konten
         .map((k) => `<option value="${escapeHtml(k.nummer)}">${escapeHtml(k.nummer)} ${escapeHtml(k.bezeichnung)}</option>`)

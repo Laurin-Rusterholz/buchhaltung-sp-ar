@@ -2,7 +2,7 @@
 // Stellt die gleiche Schnittstelle bereit, die alle Views verwenden.
 
 import { readJson, writeJson, uploadFile, deleteFile } from './firebase.js';
-import { DEFAULT_EINSTELLUNGEN, DEFAULT_KONTENPLAN } from './defaults.js';
+import { DEFAULT_EINSTELLUNGEN, DEFAULT_KONTENPLAN, DEFAULT_VORLAGEN } from './defaults.js';
 import { bilanz, erfolgsrechnung, kontoauszug } from './accounting.js';
 
 function uid(prefix = '') {
@@ -267,6 +267,8 @@ export const api = {
       groesse: file.size,
       url,
       storagePath: fullPath,
+      // AI-Analyse-Ergebnis falls vorhanden (für nachträgliche Buchungs-Erstellung)
+      ai_analyse: meta.ai_analyse || null,
       erstellt_am: new Date().toISOString(),
     };
     list.push(belegMeta);
@@ -282,6 +284,45 @@ export const api = {
     if (meta.storagePath) {
       try { await deleteFile(meta.storagePath); } catch (e) { console.warn('Storage-Datei nicht gelöscht:', e); }
     }
+    return { ok: true };
+  },
+
+  // ===== Vorlagen (Mails / Briefe) =====
+  listVorlagen: async () => {
+    const list = await readJson('vorlagen', null);
+    if (list === null) {
+      await writeJson('vorlagen', DEFAULT_VORLAGEN);
+      return DEFAULT_VORLAGEN.slice();
+    }
+    return list;
+  },
+  saveVorlage: async (v) => {
+    if (!v.name) throw new Error('Name ist Pflicht');
+    const list = await api.listVorlagen();
+    const vorlage = {
+      id: uid('v-'),
+      name: v.name,
+      typ: v.typ || 'mail',
+      betreff: v.betreff || '',
+      inhalt: v.inhalt || '',
+      erstellt_am: new Date().toISOString(),
+    };
+    list.push(vorlage);
+    await writeJson('vorlagen', list);
+    return vorlage;
+  },
+  updateVorlage: async (id, v) => {
+    const list = await api.listVorlagen();
+    const idx = list.findIndex((x) => x.id === id);
+    if (idx < 0) throw new Error('Vorlage nicht gefunden');
+    list[idx] = { ...list[idx], ...v, id: list[idx].id };
+    await writeJson('vorlagen', list);
+    return list[idx];
+  },
+  deleteVorlage: async (id) => {
+    const list = await api.listVorlagen();
+    const newList = list.filter((x) => x.id !== id);
+    await writeJson('vorlagen', newList);
     return { ok: true };
   },
 

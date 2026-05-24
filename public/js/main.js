@@ -12,6 +12,7 @@ import konten from './views/konten.js';
 import mitglieder from './views/mitglieder.js';
 import rechnungen from './views/rechnungen.js';
 import belege from './views/belege.js';
+import vorlagen from './views/vorlagen.js';
 import berichte from './views/berichte.js';
 import geschaeftsjahre from './views/geschaeftsjahre.js';
 import einstellungen from './views/einstellungen.js';
@@ -21,6 +22,8 @@ export const state = {
   einstellungen: { ...DEFAULT_EINSTELLUNGEN },
   jahre: [],
   aktuellesJahr: currentYear(),
+  // Vorbefüllte Buchung (z.B. nach AI-Analyse eines Belegs)
+  pendingBuchung: null,
 };
 
 function persistJahr(jahr) {
@@ -115,6 +118,7 @@ register('konten', konten);
 register('mitglieder', mitglieder);
 register('rechnungen', rechnungen);
 register('belege', belege);
+register('vorlagen', vorlagen);
 register('berichte', berichte);
 register('geschaeftsjahre', geschaeftsjahre);
 register('einstellungen', einstellungen);
