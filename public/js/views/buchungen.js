@@ -13,6 +13,7 @@ export default {
     ]);
     konten.sort((a, b) => a.nummer.localeCompare(b.nummer));
     const kontoMap = new Map(konten.map((k) => [k.nummer, k]));
+    const belegMap = new Map(belege.map((b) => [b.id, b]));
 
     container.innerHTML = `
       <div class="page-header">
@@ -81,7 +82,7 @@ export default {
             <td>${escapeHtml(b.soll)} <span class="muted small">${escapeHtml(kontoMap.get(b.soll)?.bezeichnung || '')}</span></td>
             <td>${escapeHtml(b.haben)} <span class="muted small">${escapeHtml(kontoMap.get(b.haben)?.bezeichnung || '')}</span></td>
             <td class="num">${formatChf(b.betrag)}</td>
-            <td>${b.beleg_id ? `<a href="/api/belege/${escapeHtml(b.beleg_id)}/file" target="_blank">Öffnen</a>` : ''}</td>
+            <td>${b.beleg_id && belegMap.get(b.beleg_id)?.url ? `<a href="${escapeHtml(belegMap.get(b.beleg_id).url)}" target="_blank" rel="noopener">Öffnen</a>` : ''}</td>
             <td class="right">
               <button class="sm" data-edit="${escapeHtml(b.id)}">Bearbeiten</button>
               <button class="sm danger" data-delete="${escapeHtml(b.id)}">Löschen</button>

@@ -1,18 +1,11 @@
 {
   "name": "buchhaltung-sp-ar",
-  "version": "0.1.0",
-  "description": "Buchhaltungsprogramm für Schweizer Vereine (Basis SP AR)",
+  "version": "0.2.0",
+  "description": "Buchhaltungsprogramm für Schweizer Vereine (Basis SP AR) – Storage via Firebase",
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "netlify dev",
-    "build": "echo 'Statisches Frontend – kein Build nötig'"
-  },
-  "dependencies": {
-    "@netlify/blobs": "^8.1.0"
-  },
-  "devDependencies": {
-    "netlify-cli": "^17.0.0"
+    "dev": "npx --yes serve public -p 8080"
   },
   "engines": {
     "node": ">=20"

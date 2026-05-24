@@ -1,4 +1,5 @@
 // Buchhaltungs-Logik: Saldo, Bilanz, Erfolgsrechnung, Kontoauszug
+// Reine Funktionen, ohne Side-Effects – einfach zu testen und anzupassen.
 
 export function kontoSaldo(kontoNr, typ, buchungen) {
   let soll = 0, haben = 0;
@@ -18,9 +19,9 @@ export function bilanz(konten, buchungen, einstellungen) {
   for (const k of konten) {
     const s = kontoSaldo(k.nummer, k.typ, buchungen);
     if (k.typ === 'aktiv') {
-      // 2900 wird separat als Ergebnis ausgewiesen
       if (s !== 0) aktiven.push({ nummer: k.nummer, bezeichnung: k.bezeichnung, saldo: s });
     } else if (k.typ === 'passiv') {
+      // Jahresergebnis-Konto separat ausweisen
       const isErgebnis = einstellungen?.konto_ergebnis && k.nummer === einstellungen.konto_ergebnis;
       if (isErgebnis) continue;
       if (s !== 0) passiven.push({ nummer: k.nummer, bezeichnung: k.bezeichnung, saldo: s });

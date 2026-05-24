@@ -43,7 +43,7 @@ export default {
           <tr>
             <td>${formatDate(b.datum)}</td>
             <td><strong>${escapeHtml(b.bezeichnung || '')}</strong></td>
-            <td><a href="/api/belege/${escapeHtml(b.id)}/file" target="_blank">${escapeHtml(b.dateiname)}</a></td>
+            <td><a href="${escapeHtml(b.url)}" target="_blank" rel="noopener">${escapeHtml(b.dateiname)}</a></td>
             <td class="num muted small">${formatSize(b.groesse)}</td>
             <td class="muted small">${escapeHtml(b.tags || '')}</td>
             <td class="right">
@@ -77,33 +77,58 @@ export default {
         title: 'Beleg hochladen',
         body: `
           <div class="form-grid">
-            <div class="input-group full"><label>Datei (PDF, JPG, PNG)</label><input name="file" type="file" accept=".pdf,.png,.jpg,.jpeg" /></div>
-            <div class="input-group full"><label>Bezeichnung</label><input name="bezeichnung" placeholder="z.B. Restaurant Krone Quittung" /></div>
+            <div class="input-group full">
+              <label>Datei (PDF, JPG, PNG, …)</label>
+              <input name="file" type="file" />
+            </div>
+            <div class="input-group full">
+              <label>Bezeichnung</label>
+              <input name="bezeichnung" placeholder="z.B. Restaurant Krone Quittung" />
+            </div>
             <div class="input-group"><label>Datum</label><input name="datum" type="date" value="${today}" /></div>
             <div class="input-group"><label>Tags (kommagetrennt)</label><input name="tags" placeholder="z.B. spesen, vorstand" /></div>
+            <div class="input-group full">
+              <div id="upload-progress" class="muted small hidden">
+                Lädt hoch… <span id="upload-pct">0%</span>
+              </div>
+            </div>
           </div>
         `,
         footer: `<button data-cancel>Abbrechen</button><button class="primary" data-save>Hochladen</button>`,
       });
+
+      const progressEl = m.bodyEl.querySelector('#upload-progress');
+      const pctEl = m.bodyEl.querySelector('#upload-pct');
+      const saveBtn = m.footerEl.querySelector('[data-save]');
+
       m.footerEl.querySelector('[data-cancel]').onclick = m.close;
-      m.footerEl.querySelector('[data-save]').onclick = async () => {
+      saveBtn.onclick = async () => {
         const fileInput = m.bodyEl.querySelector('[name="file"]');
-        if (!fileInput.files?.[0]) { toast('Bitte Datei wählen', 'error'); return; }
-        const file = fileInput.files[0];
-        if (file.size > 8 * 1024 * 1024) { toast('Datei zu gross (max. 8 MB)', 'error'); return; }
-        const data = {};
-        m.bodyEl.querySelectorAll('[name]').forEach((el) => { if (el.name !== 'file') data[el.name] = el.value.trim(); });
+        const file = fileInput.files?.[0];
+        if (!file) { toast('Bitte Datei wählen', 'error'); return; }
+        if (file.size > 50 * 1024 * 1024) { toast('Datei zu gross (max. 50 MB)', 'error'); return; }
+
+        const meta = {
+          bezeichnung: m.bodyEl.querySelector('[name="bezeichnung"]').value.trim(),
+          datum: m.bodyEl.querySelector('[name="datum"]').value,
+          tags: m.bodyEl.querySelector('[name="tags"]').value.trim(),
+        };
+
+        saveBtn.disabled = true;
+        progressEl.classList.remove('hidden');
         try {
-          data.dateiname = file.name;
-          data.mime = file.type || 'application/octet-stream';
-          data.groesse = file.size;
-          data.inhalt_base64 = await fileToBase64(file);
-          await api.uploadBeleg(data);
+          await api.uploadBeleg(file, meta, (p) => {
+            pctEl.textContent = `${Math.round(p * 100)}%`;
+          });
           m.close();
           belege = await api.listBelege();
           renderRows();
           toast('Beleg gespeichert', 'success');
-        } catch (err) { toast(err.message, 'error'); }
+        } catch (err) {
+          toast(err.message, 'error');
+          saveBtn.disabled = false;
+          progressEl.classList.add('hidden');
+        }
       };
     }
   },
@@ -114,13 +139,4 @@ function formatSize(b) {
   if (b > 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
   if (b > 1024) return `${(b / 1024).toFixed(0)} KB`;
   return `${b} B`;
-}
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(',')[1]);
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
 }

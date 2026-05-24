@@ -1,4 +1,4 @@
-// Schweizer Standard-Kontenplan für Vereine
+// Schweizer Standard-Kontenplan für Vereine + Default-Einstellungen
 
 export const DEFAULT_EINSTELLUNGEN = {
   name: 'Verein',
@@ -20,7 +20,6 @@ export const DEFAULT_EINSTELLUNGEN = {
   konto_bank: '1020',
 };
 
-// kategorie: optional, z.B. "liquid" für Dashboard-Aggregation
 export const DEFAULT_KONTENPLAN = [
   // === Aktiven ===
   { nummer: '1000', bezeichnung: 'Kasse', typ: 'aktiv', kategorie: 'liquid' },
