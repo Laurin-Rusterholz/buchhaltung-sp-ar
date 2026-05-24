@@ -3,7 +3,7 @@
 
 import { api } from '../api.js';
 import { state } from '../main.js';
-import { escapeHtml, formatChf, currentYear } from '../utils.js';
+import { escapeHtml, formatChf, currentYear, debounce } from '../utils.js';
 import { modal, toast, confirmDialog } from '../components.js';
 import { generateVoranschlag, hasApiKey } from '../ai.js';
 import { kontoSaldo } from '../accounting.js';
@@ -79,9 +79,17 @@ export default {
           <h2>Voranschlag</h2>
           <div class="actions">
             <label class="muted small" style="display:flex;align-items:center;gap:6px">Jahr <select id="budget-jahr">${jahrOptions.join('')}</select></label>
+            <span id="save-indicator" class="badge muted">Bereit</span>
             <button class="ai" id="ai-generate" ${hasApiKey() ? '' : 'disabled title="Gemini Key in Einstellungen hinterlegen"'}>✨ AI-Voranschlag</button>
-            <button class="primary" id="save-budget">Speichern</button>
+            <button class="primary" id="save-budget">Manuell speichern</button>
           </div>
+        </div>
+
+        <div class="card" style="background:#eff6ff;border-color:#bfdbfe">
+          <p class="small" style="margin:0;color:#1e3a8a">
+            💡 <strong>Alle Felder sind direkt editierbar.</strong> Tippe Beträge und Notizen
+            inline – wird automatisch nach kurzem Tippstopp gespeichert.
+          </p>
         </div>
 
         <div class="cards-grid">
@@ -124,6 +132,32 @@ export default {
         renderUI();
       };
 
+      // Save-Indicator-Helpers
+      const indicator = container.querySelector('#save-indicator');
+      const setIndicator = (state) => {
+        if (!indicator) return;
+        switch (state) {
+          case 'dirty': indicator.className = 'badge warning'; indicator.textContent = '• Ungespeicherte Änderungen'; break;
+          case 'saving': indicator.className = 'badge muted'; indicator.textContent = 'Speichert…'; break;
+          case 'saved': indicator.className = 'badge success'; indicator.textContent = '✓ Gespeichert ' + new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }); break;
+          case 'error': indicator.className = 'badge danger'; indicator.textContent = '⚠ Fehler'; break;
+          default: indicator.className = 'badge muted'; indicator.textContent = 'Bereit';
+        }
+      };
+
+      const doSave = async () => {
+        setIndicator('saving');
+        try {
+          const notizen = container.querySelector('#budget-notizen').value;
+          await api.saveBudget(budgetJahr, positionen, notizen);
+          setIndicator('saved');
+        } catch (err) {
+          setIndicator('error');
+          toast(err.message, 'error');
+        }
+      };
+      const autoSave = debounce(doSave, 800);
+
       // Inline-Bearbeitung der Beträge
       container.querySelectorAll('[data-budget-input]').forEach((input) => {
         input.oninput = () => {
@@ -136,6 +170,8 @@ export default {
           } else if (existing) {
             positionen = positionen.filter((p) => p.konto !== konto);
           }
+          setIndicator('dirty');
+          autoSave();
         };
       });
       container.querySelectorAll('[data-budget-notiz]').forEach((input) => {
@@ -144,17 +180,20 @@ export default {
           const existing = positionen.find((p) => p.konto === konto);
           if (existing) existing.notiz = input.value;
           else if (input.value) positionen.push({ konto, betrag: 0, notiz: input.value });
+          setIndicator('dirty');
+          autoSave();
         };
       });
+      const notizenEl = container.querySelector('#budget-notizen');
+      if (notizenEl) {
+        notizenEl.oninput = () => {
+          setIndicator('dirty');
+          autoSave();
+        };
+      }
 
-      // Speichern
-      container.querySelector('#save-budget').onclick = async () => {
-        try {
-          const notizen = container.querySelector('#budget-notizen').value;
-          await api.saveBudget(budgetJahr, positionen, notizen);
-          toast('Voranschlag gespeichert', 'success');
-        } catch (err) { toast(err.message, 'error'); }
-      };
+      // Manuelle Speichern-Schaltfläche
+      container.querySelector('#save-budget').onclick = doSave;
 
       // AI-Generierung
       container.querySelector('#ai-generate').onclick = () => openAi();

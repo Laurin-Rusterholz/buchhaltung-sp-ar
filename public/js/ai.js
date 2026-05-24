@@ -115,6 +115,7 @@ Wichtig: Aktiv- und Aufwand-Zugänge ins Soll; Passiv- und Ertrag-Zugänge ins H
 }
 
 // === Beleg-Auto-Analyse (Vision) ===
+// Schlägt eine vollständige Doppelbuchung vor (Soll + Haben).
 export async function analyzeBeleg(file, konten) {
   if (!file.type?.startsWith('image/') && file.type !== 'application/pdf') {
     throw new Error('Auto-Analyse nur für Bilder oder PDFs');
@@ -123,28 +124,46 @@ export async function analyzeBeleg(file, konten) {
     .filter((k) => k.typ === 'aufwand' || k.typ === 'ertrag')
     .map((k) => `${k.nummer} ${k.bezeichnung} [${k.typ}]`)
     .join('\n');
+  const liquide = konten
+    .filter((k) => k.typ === 'aktiv')
+    .map((k) => `${k.nummer} ${k.bezeichnung}`)
+    .join('\n');
 
   const data = await fileToBase64(file);
-  const prompt = `Analysiere diesen Beleg/Quittung und extrahiere die Informationen.
+  const prompt = `Analysiere diesen Beleg und schlage eine vollständige Doppelbuchung vor.
 
-Antworte AUSSCHLIESSLICH mit folgendem JSON, ohne weitere Erklärungen:
+Regel:
+- Bei einer AUSGABE/Quittung: Soll = Aufwandkonto, Haben = Zahlmittel (Bank/Kasse)
+- Bei einer EINNAHME: Soll = Zahlmittel (Bank/Kasse), Haben = Ertragskonto
+
+Antworte AUSSCHLIESSLICH mit folgendem JSON, ohne Erklärung:
 {
   "datum": "<YYYY-MM-DD>",
-  "betrag": <Zahl in CHF>,
+  "betrag": <Zahl in CHF, positiv>,
   "vendor": "<Verkäufer / Anbieter>",
   "beschreibung": "<kurze Beschreibung des Vorgangs>",
-  "konto_vorschlag": "<Kontonummer aus Liste>",
+  "ist_einnahme": <true wenn Einnahme, false wenn Ausgabe>,
+  "konto_soll": "<Kontonummer>",
+  "konto_haben": "<Kontonummer>",
   "tags": "<kommagetrennte Stichworte, max 3>"
 }
 
-Verfügbare Aufwand-/Ertragskonten:
-${aufwandErtrag}`;
+Aufwand/Ertrag-Konten:
+${aufwandErtrag}
+
+Zahlmittel / Aktivkonten (Bank, Kasse, …):
+${liquide}
+
+Verwende AUSSCHLIESSLICH Kontonummern aus den obigen Listen.`;
 
   const text = await callGemini([
     { text: prompt },
     { inline_data: { mime_type: file.type, data } },
   ]);
-  return extractJson(text);
+  const result = extractJson(text);
+  // Backward-Compat-Feld
+  result.konto_vorschlag = result.konto_soll || result.konto_vorschlag;
+  return result;
 }
 
 // === Kontenplan basierend auf Vereins-Beschreibung generieren ===

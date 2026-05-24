@@ -114,12 +114,14 @@ export default {
     function createBuchungFromBeleg(beleg) {
       if (!beleg?.ai_analyse) return;
       const ai = beleg.ai_analyse;
+      const bankFallback = state.einstellungen?.konto_bank || '';
       state.pendingBuchung = {
         datum: ai.datum || beleg.datum,
         beleg_nr: '',
         beschreibung: ai.beschreibung || beleg.bezeichnung || '',
-        soll: ai.konto_vorschlag || '',
-        haben: state.einstellungen?.konto_bank || '',
+        // Beide Konten aus AI-Analyse, sonst Fallback
+        soll: ai.konto_soll || ai.konto_vorschlag || (ai.ist_einnahme ? bankFallback : ''),
+        haben: ai.konto_haben || (ai.ist_einnahme ? '' : bankFallback),
         betrag: ai.betrag || '',
         beleg_id: beleg.id,
       };
@@ -302,12 +304,14 @@ gsutil cors set cors.json gs://jupidu-36804.firebasestorage.app</code></pre>
             if (result.datum) m.bodyEl.querySelector('[name="datum"]').value = result.datum;
             if (result.tags) m.bodyEl.querySelector('[name="tags"]').value = result.tags;
             aiResult.classList.remove('hidden');
-            const kontoLabel = konten.find((k) => k.nummer === result.konto_vorschlag);
+            const sollKonto = konten.find((k) => k.nummer === result.konto_soll);
+            const habenKonto = konten.find((k) => k.nummer === result.konto_haben);
             aiResult.innerHTML = `
-              <strong>Erkannt:</strong><br>
+              <strong>Erkannt (${result.ist_einnahme ? 'Einnahme' : 'Ausgabe'}):</strong><br>
               ${result.vendor ? `Anbieter: <strong>${escapeHtml(result.vendor)}</strong><br>` : ''}
               ${result.betrag ? `Betrag: <strong>CHF ${escapeHtml(result.betrag)}</strong><br>` : ''}
-              ${kontoLabel ? `Kontovorschlag: <strong>${escapeHtml(kontoLabel.nummer)} ${escapeHtml(kontoLabel.bezeichnung)}</strong><br>` : (result.konto_vorschlag ? `Kontovorschlag: ${escapeHtml(result.konto_vorschlag)}<br>` : '')}
+              ${sollKonto ? `Soll: <strong>${escapeHtml(sollKonto.nummer)} ${escapeHtml(sollKonto.bezeichnung)}</strong><br>` : (result.konto_soll ? `Soll: ${escapeHtml(result.konto_soll)}<br>` : '')}
+              ${habenKonto ? `Haben: <strong>${escapeHtml(habenKonto.nummer)} ${escapeHtml(habenKonto.bezeichnung)}</strong><br>` : (result.konto_haben ? `Haben: ${escapeHtml(result.konto_haben)}<br>` : '')}
               <span class="muted small">Nach dem Upload kannst du direkt eine Buchung daraus erstellen.</span>
             `;
             aiStatus.textContent = '✓ analysiert';

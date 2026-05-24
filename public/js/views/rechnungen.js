@@ -27,6 +27,7 @@ export default {
       <div class="page-header">
         <h2>Rechnungen ${jahr}</h2>
         <div class="actions">
+          <button id="batch">📨 Sektionsbeitrags-Rechnungen</button>
           <button class="primary" id="add">+ Neue Rechnung</button>
         </div>
       </div>
@@ -102,6 +103,7 @@ export default {
     renderRows();
 
     container.querySelector('#add').onclick = () => openForm();
+    container.querySelector('#batch').onclick = () => openBatch();
 
     tbody.addEventListener('click', async (e) => {
       const editId = e.target?.dataset?.edit;
@@ -123,6 +125,22 @@ export default {
     function showInvoice(r) {
       if (!r) return;
       const v = state.einstellungen || {};
+      const html = buildInvoiceHtml(r, v);
+      const m = modal({
+        title: `Rechnung ${r.nummer}`,
+        body: html,
+        footer: `
+          <button data-cancel>Schliessen</button>
+          <button id="inv-print">🖨 Drucken / PDF</button>
+          <button class="primary" id="inv-window">📄 Als Dokument öffnen</button>
+        `,
+      });
+      m.footerEl.querySelector('[data-cancel]').onclick = m.close;
+      m.footerEl.querySelector('#inv-print').onclick = () => printInvoice(r, v);
+      m.footerEl.querySelector('#inv-window').onclick = () => printInvoice(r, v);
+    }
+
+    function buildInvoiceHtml(r, v) {
       const positionen = (r.positionen || []).map((p) => `
         <tr>
           <td>${escapeHtml(p.bezeichnung)}</td>
@@ -131,35 +149,209 @@ export default {
           <td class="num">${formatChf(Number(p.menge) * Number(p.preis))}</td>
         </tr>
       `).join('');
-      modal({
-        title: `Rechnung ${r.nummer}`,
+      return `
+        <div class="invoice-doc" style="padding:20px; background:white;">
+          <div class="flex between" style="margin-bottom:32px">
+            <div>
+              <div class="bold" style="font-size:18px;color:#c8102e">${escapeHtml(v.name || 'Verein')}</div>
+              ${v.untertitel ? `<div class="muted small">${escapeHtml(v.untertitel)}</div>` : ''}
+              <div class="muted small mt-2">${escapeHtml(v.adresse || '')}${v.plz || v.ort ? `<br>${escapeHtml(v.plz || '')} ${escapeHtml(v.ort || '')}` : ''}</div>
+              ${v.email ? `<div class="muted small">${escapeHtml(v.email)}</div>` : ''}
+            </div>
+            <div class="right">
+              <div style="font-size:24px;font-weight:700">RECHNUNG</div>
+              <div class="muted small mt-2">
+                Nr.: <strong>${escapeHtml(r.nummer)}</strong><br>
+                Datum: ${formatDate(r.datum)}<br>
+                ${r.faellig_am ? `Fällig: ${formatDate(r.faellig_am)}` : ''}
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-bottom:24px">
+            <div class="muted small">An:</div>
+            <div class="bold" style="font-size:15px">${escapeHtml(r.empfaenger_name || '')}</div>
+            <div style="white-space:pre-line">${escapeHtml(r.empfaenger_adresse || '')}</div>
+          </div>
+
+          ${r.beschreibung ? `<p style="font-size:15px;margin-bottom:16px"><strong>${escapeHtml(r.beschreibung)}</strong></p>` : ''}
+
+          <table class="data" style="margin-bottom:16px">
+            <thead><tr><th>Bezeichnung</th><th class="num">Menge</th><th class="num">Preis CHF</th><th class="num">Total CHF</th></tr></thead>
+            <tbody>${positionen}</tbody>
+            <tfoot><tr><td colspan="3" class="right"><strong>Total</strong></td><td class="num"><strong>${formatChf(r.total || 0)}</strong></td></tr></tfoot>
+          </table>
+
+          <div style="margin-top:32px;padding-top:16px;border-top:1px solid #ddd">
+            <div class="bold" style="margin-bottom:6px">Zahlungsinformationen</div>
+            ${v.bank ? `<div class="small">Bank: ${escapeHtml(v.bank)}</div>` : ''}
+            ${v.iban ? `<div class="small">IBAN: <code>${escapeHtml(v.iban)}</code></div>` : ''}
+            ${v.bic ? `<div class="small">BIC: ${escapeHtml(v.bic)}</div>` : ''}
+            <div class="small mt-2">Bitte gib bei der Überweisung die Rechnungsnummer <strong>${escapeHtml(r.nummer)}</strong> als Vermerk an.</div>
+            ${r.faellig_am ? `<div class="small mt-2">Zahlbar bis <strong>${formatDate(r.faellig_am)}</strong>.</div>` : ''}
+          </div>
+
+          <div style="margin-top:32px;font-size:11px;color:#888">
+            Vielen Dank für die solidarische Unterstützung.
+          </div>
+        </div>
+      `;
+    }
+
+    function printInvoice(r, v) {
+      const w = window.open('', '_blank');
+      if (!w) { toast('Popup blockiert – im Browser erlauben', 'error'); return; }
+      w.document.write(`
+        <!DOCTYPE html>
+        <html><head>
+          <title>Rechnung ${escapeHtml(r.nummer)}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 14px; line-height: 1.5; color: #1f2330; max-width: 700px; margin: 40px auto; padding: 0 20px; }
+            .flex { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+            .right { text-align: right; }
+            .num { text-align: right; font-variant-numeric: tabular-nums; }
+            .muted { color: #6b7280; }
+            .small { font-size: 12px; }
+            .bold { font-weight: 600; }
+            .mt-2 { margin-top: 6px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; }
+            th { text-align: left; background: #f9fafb; font-size: 11px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.5px; }
+            tfoot td { border-top: 2px solid #1f2330; border-bottom: none; }
+            code { background: #f3f4f6; padding: 1px 6px; border-radius: 3px; font-family: monospace; }
+            @media print { body { margin: 20px; } }
+          </style>
+        </head><body>${buildInvoiceHtml(r, v)}<script>window.onload=()=>window.print()</script></body></html>
+      `);
+      w.document.close();
+    }
+
+
+    function openBatch() {
+      const aktive = sektionen.filter((s) => (s.status || 'aktiv') === 'aktiv');
+      if (aktive.length === 0) {
+        toast('Keine aktiven Sektionen vorhanden', 'error');
+        return;
+      }
+      const today = todayIso();
+      const inThirtyDays = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+      const m = modal({
+        title: `Sektionsbeitrags-Rechnungen für ${jahr} erstellen`,
         body: `
-          <div class="report" style="padding:20px;">
-            <div class="flex between">
-              <div>
-                <div class="bold">${escapeHtml(v.name || 'Verein')}</div>
-                <div class="muted small">${escapeHtml(v.adresse || '')}<br>${escapeHtml(v.plz || '')} ${escapeHtml(v.ort || '')}</div>
-              </div>
-              <div class="right">
-                <div class="bold">Rechnung ${escapeHtml(r.nummer)}</div>
-                <div class="muted small">Datum: ${formatDate(r.datum)}<br>Fällig: ${formatDate(r.faellig_am)}</div>
-              </div>
-            </div>
-            <div class="mt-4">
-              <div class="bold">${escapeHtml(r.empfaenger_name || '')}</div>
-              <div class="muted small">${escapeHtml(r.empfaenger_adresse || '').replace(/\n/g, '<br>')}</div>
-            </div>
-            <p class="mt-4">${escapeHtml(r.beschreibung || '')}</p>
-            <table class="data mt-4">
-              <thead><tr><th>Bezeichnung</th><th class="num">Menge</th><th class="num">Preis</th><th class="num">Total CHF</th></tr></thead>
-              <tbody>${positionen}</tbody>
-              <tfoot><tr><td colspan="3" class="right">Total</td><td class="num">${formatChf(r.total || 0)}</td></tr></tfoot>
+          <p class="muted small">
+            Erstellt eine Rechnung pro ausgewählter Sektion mit dem
+            jeweiligen Mitgliederbeitrag aus den Sektions-Stammdaten.
+          </p>
+          <div class="form-grid">
+            <div class="input-group"><label>Rechnungsdatum</label><input name="datum" type="date" value="${today}" /></div>
+            <div class="input-group"><label>Fällig am</label><input name="faellig_am" type="date" value="${inThirtyDays}" /></div>
+            <div class="input-group full"><label>Betreff</label><input name="beschreibung" value="Sektionsbeitrag ${jahr}" /></div>
+          </div>
+          <h4>Sektionen wählen</h4>
+          <div class="table-wrap" style="max-height:320px;overflow:auto">
+            <table class="data">
+              <thead><tr><th><input type="checkbox" id="check-all" checked /></th><th>Sektion</th><th class="num">Mitglieder</th><th class="num">Beitrag/Kopf</th><th class="num">Total CHF</th></tr></thead>
+              <tbody>
+                ${aktive.map((s) => {
+                  const total = Number(s.anzahl_mitglieder || 0) * Number(s.beitrag_pro_mitglied || 0);
+                  return `
+                    <tr>
+                      <td><input type="checkbox" class="batch-check" data-id="${escapeHtml(s.id)}" ${total > 0 ? 'checked' : ''} /></td>
+                      <td>${escapeHtml(s.name)}</td>
+                      <td class="num">${s.anzahl_mitglieder || 0}</td>
+                      <td class="num">${formatChf(s.beitrag_pro_mitglied || 0)}</td>
+                      <td class="num bold">${formatChf(total)}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="4" class="right">Total ausgewählt</td>
+                  <td class="num bold" id="batch-total">CHF ${formatChf(aktive.reduce((s, x) => s + Number(x.anzahl_mitglieder || 0) * Number(x.beitrag_pro_mitglied || 0), 0))}</td>
+                </tr>
+              </tfoot>
             </table>
-            ${v.iban ? `<p class="mt-4 muted small">Zahlung auf IBAN ${escapeHtml(v.iban)} unter Angabe der Rechnungsnummer ${escapeHtml(r.nummer)}.</p>` : ''}
           </div>
         `,
-        footer: `<button data-cancel>Schliessen</button><button class="primary" onclick="window.print()">Drucken</button>`,
-      }).footerEl.querySelector('[data-cancel]').onclick = (e) => e.target.closest('.modal-backdrop').remove();
+        footer: `<button data-cancel>Abbrechen</button><button class="primary" id="batch-create">Rechnungen erstellen</button>`,
+      });
+
+      const checkAll = m.bodyEl.querySelector('#check-all');
+      const updateTotal = () => {
+        const checked = m.bodyEl.querySelectorAll('.batch-check:checked');
+        let total = 0;
+        checked.forEach((cb) => {
+          const s = aktive.find((x) => x.id === cb.dataset.id);
+          if (s) total += Number(s.anzahl_mitglieder || 0) * Number(s.beitrag_pro_mitglied || 0);
+        });
+        m.bodyEl.querySelector('#batch-total').textContent = `CHF ${formatChf(total)}`;
+      };
+      checkAll.onchange = () => {
+        m.bodyEl.querySelectorAll('.batch-check').forEach((cb) => (cb.checked = checkAll.checked));
+        updateTotal();
+      };
+      m.bodyEl.querySelectorAll('.batch-check').forEach((cb) => (cb.onchange = updateTotal));
+
+      m.footerEl.querySelector('[data-cancel]').onclick = m.close;
+      m.footerEl.querySelector('#batch-create').onclick = async () => {
+        const datum = m.bodyEl.querySelector('[name="datum"]').value;
+        const faellig = m.bodyEl.querySelector('[name="faellig_am"]').value;
+        const beschreibung = m.bodyEl.querySelector('[name="beschreibung"]').value;
+        const selectedIds = Array.from(m.bodyEl.querySelectorAll('.batch-check:checked')).map((cb) => cb.dataset.id);
+        if (selectedIds.length === 0) { toast('Keine Sektion ausgewählt', 'error'); return; }
+
+        const btn = m.footerEl.querySelector('#batch-create');
+        btn.disabled = true;
+        let created = 0;
+        let failed = 0;
+        let nextNum = nextNummer(rechnungen, jahr).replace(/\d+$/, (n) => Number(n));
+
+        for (const id of selectedIds) {
+          const s = aktive.find((x) => x.id === id);
+          if (!s) continue;
+          const total = Number(s.anzahl_mitglieder || 0) * Number(s.beitrag_pro_mitglied || 0);
+          if (total <= 0) continue;
+          try {
+            // Aktuelle Liste neu lesen für korrekte Nummerierung in der Schleife
+            const aktList = await api.listRechnungen(jahr);
+            const nr = nextNummer(aktList, jahr);
+            await api.saveRechnung(jahr, {
+              nummer: nr,
+              datum,
+              faellig_am: faellig,
+              empfaenger_typ: 'sektion',
+              empfaenger_id: s.id,
+              empfaenger_name: s.name,
+              empfaenger_adresse: [s.kontakt_name, s.adresse, `${s.plz || ''} ${s.ort || ''}`.trim()].filter(Boolean).join('\n'),
+              beschreibung,
+              positionen: [{
+                id: `pos-${id}`,
+                bezeichnung: `Sektionsbeitrag ${jahr}: ${s.anzahl_mitglieder} Mitglieder × CHF ${s.beitrag_pro_mitglied}`,
+                menge: Number(s.anzahl_mitglieder),
+                preis: Number(s.beitrag_pro_mitglied),
+              }],
+              total,
+              status: 'offen',
+            });
+            created++;
+          } catch (err) {
+            console.error('Batch-Fehler bei', s.name, err);
+            failed++;
+          }
+        }
+
+        m.close();
+        rechnungen = await api.listRechnungen(jahr);
+        renderRows();
+        if (failed > 0) {
+          toast(`${created} Rechnungen erstellt, ${failed} fehlgeschlagen`, 'error');
+        } else {
+          toast(`${created} Rechnungen erstellt`, 'success');
+        }
+      };
     }
 
     function openForm(rechnung) {
