@@ -1,0 +1,20 @@
+{
+  "name": "buchhaltung-sp-ar",
+  "version": "0.1.0",
+  "description": "Buchhaltungsprogramm für Schweizer Vereine (Basis SP AR)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "echo 'Statisches Frontend – kein Build nötig'"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
