@@ -120,16 +120,36 @@ async function urlToBase64(url) {
   return { mime, data };
 }
 
+// Fasst die letzten Buchungen kompakt zusammen – Format für die KI, damit
+// sie aus den bisherigen Mustern lernt. Limit hält die Token-Kosten klein.
+export function summarizeBuchungen(buchungen, konten, limit = 50) {
+  if (!Array.isArray(buchungen) || buchungen.length === 0) return '';
+  const recent = buchungen
+    .slice()
+    .sort((a, b) => (b.datum || '').localeCompare(a.datum || ''))
+    .slice(0, limit);
+  const kontoLabel = new Map((konten || []).map((k) => [k.nummer, k.bezeichnung]));
+  return recent.map((b) => {
+    const sollLbl = kontoLabel.get(b.soll) || '';
+    const habenLbl = kontoLabel.get(b.haben) || '';
+    return `- ${b.datum} | "${b.beschreibung || ''}" | Soll ${b.soll} ${sollLbl} → Haben ${b.haben} ${habenLbl} | CHF ${Number(b.betrag).toFixed(2)}`;
+  }).join('\n');
+}
+
 // === Buchungsvorschlag aus Beschreibung ===
-export async function suggestBuchung({ beschreibung, betrag, datum, konten }) {
+// `buchungen` (optional): bisherige Buchungen – die KI lernt aus den Mustern.
+export async function suggestBuchung({ beschreibung, betrag, datum, konten, buchungen }) {
   const list = konten
     .map((k) => `${k.nummer} ${k.bezeichnung} [${k.typ}]`)
     .join('\n');
+  const historie = summarizeBuchungen(buchungen, konten);
   const prompt = `Du bist Buchhalter:in eines Schweizer Vereins. Schlage für folgenden Geschäftsvorfall die korrekte Doppelbuchung vor.
 
 Vorgang: "${beschreibung}"
 ${betrag ? `Betrag: CHF ${betrag}` : ''}
 ${datum ? `Datum: ${datum}` : ''}
+
+${historie ? `Bisherige Buchungen aus der Buchhaltung (lerne aus diesen Mustern – wenn ein ähnlicher Vorgang schon gebucht wurde, schlage dieselben Konten vor):\n${historie}\n` : ''}
 
 Verfügbare Konten:
 ${list}
@@ -153,26 +173,27 @@ Wichtig: Aktiv- und Aufwand-Zugänge ins Soll; Passiv- und Ertrag-Zugänge ins H
 
 // === Beleg-Auto-Analyse (Vision) ===
 // Schlägt eine vollständige Doppelbuchung vor (Soll + Haben).
-export async function analyzeBeleg(file, konten) {
+// `buchungen` (optional): bisherige Buchungen als Lern-Kontext für die KI.
+export async function analyzeBeleg(file, konten, buchungen) {
   if (!file.type?.startsWith('image/') && file.type !== 'application/pdf') {
     throw new Error('Auto-Analyse nur für Bilder oder PDFs');
   }
   const data = await fileToBase64(file);
-  return analyzeBelegInternal(file.type, data, konten);
+  return analyzeBelegInternal(file.type, data, konten, buchungen);
 }
 
 // Gleiche Analyse, aber Beleg-Datei wird von einer URL geladen
 // (z.B. Firebase Storage URL aus dem sp-ar-belege Portal).
 // Liefert zusätzlich `faelligkeit` mit, falls auf dem Beleg erkennbar.
-export async function analyzeBelegFromUrl(url, konten) {
+export async function analyzeBelegFromUrl(url, konten, buchungen) {
   const { mime, data } = await urlToBase64(url);
   if (!mime.startsWith('image/') && mime !== 'application/pdf') {
     throw new Error(`Auto-Analyse nur für Bilder oder PDFs (erkannt: ${mime})`);
   }
-  return analyzeBelegInternal(mime, data, konten);
+  return analyzeBelegInternal(mime, data, konten, buchungen);
 }
 
-async function analyzeBelegInternal(mimeType, base64Data, konten) {
+async function analyzeBelegInternal(mimeType, base64Data, konten, buchungen) {
   const aufwandErtrag = konten
     .filter((k) => k.typ === 'aufwand' || k.typ === 'ertrag')
     .map((k) => `${k.nummer} ${k.bezeichnung} [${k.typ}]`)
@@ -207,6 +228,8 @@ ${aufwandErtrag}
 
 Zahlmittel / Aktivkonten (Bank, Kasse, …):
 ${liquide}
+
+${summarizeBuchungen(buchungen, konten) ? `Bisherige Buchungen (lerne aus diesen Mustern – wenn ein ähnlicher Beleg / Vendor schon gebucht wurde, schlage dieselben Konten vor):\n${summarizeBuchungen(buchungen, konten)}\n` : ''}
 
 Verwende AUSSCHLIESSLICH Kontonummern aus den obigen Listen.`;
 

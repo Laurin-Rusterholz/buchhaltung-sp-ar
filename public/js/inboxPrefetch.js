@@ -31,6 +31,17 @@ export function startInboxPrefetch({ silent = true } = {}) {
     let skipped = 0;
     let failed = 0;
     try {
+      // Buchungen aller verfügbaren Jahre laden – die KI lernt aus den
+      // historischen Mustern (max. ~150 letzte Buchungen über alle Jahre,
+      // begrenzt durch summarizeBuchungen).
+      const jahre = await api.listJahre().catch(() => []);
+      const allBuchungen = [];
+      for (const j of jahre) {
+        try {
+          const b = await api.listBuchungen(j.jahr);
+          allBuchungen.push(...b);
+        } catch {}
+      }
       const [portalBelege, konten, inboxState] = await Promise.all([
         api.fetchPortalBelege().catch(() => []),
         api.listKonten().catch(() => []),
@@ -57,7 +68,7 @@ export function startInboxPrefetch({ silent = true } = {}) {
         emit({ phase: 'progress', current: i + 1, total: todo.length, beleg: p });
         try {
           const proxyUrl = api.belegProxyUrl(p.id);
-          const res = await analyzeBelegFromUrl(proxyUrl, konten);
+          const res = await analyzeBelegFromUrl(proxyUrl, konten, allBuchungen);
           // Snapshot des Belegs für die Inbox: Draft auch direkt vorausfüllen,
           // damit das Pop-up beim Öffnen schon eine kohärente Vorschau zeigt.
           const draft = buildDraftFromAi(p, res);

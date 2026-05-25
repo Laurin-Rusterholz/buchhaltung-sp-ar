@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { state } from '../main.js';
 import { escapeHtml, formatChf, formatDate, todayIso, downloadFile, toCsv, parseHash } from '../utils.js';
-import { modal, toast, confirmDialog } from '../components.js';
+import { modal, toast, confirmDialog, enhanceSelect } from '../components.js';
 import { suggestBuchung, hasApiKey } from '../ai.js';
 
 export default {
@@ -244,6 +244,11 @@ export default {
       m.bodyEl.querySelector('[name="haben"]').value = b.haben;
       m.bodyEl.querySelector('[name="beleg_id"]').value = b.beleg_id || '';
 
+      // Selects zu durchsuchbaren Comboboxes aufwerten – User kann Konto-
+      // Nummer oder Bezeichnung tippen.
+      enhanceSelect(m.bodyEl.querySelector('[name="soll"]'), { placeholder: 'Soll-Konto suchen…' });
+      enhanceSelect(m.bodyEl.querySelector('[name="haben"]'), { placeholder: 'Haben-Konto suchen…' });
+
       // AI-Vorschlag
       const aiBtn = m.bodyEl.querySelector('[data-ai-suggest]');
       if (aiBtn) {
@@ -260,6 +265,8 @@ export default {
               betrag: aktBetrag,
               datum: m.bodyEl.querySelector('[name="datum"]').value,
               konten,
+              // Bisherige Buchungen des aktuellen Jahres als Lern-Kontext
+              buchungen,
             });
             if (kontoMap.get(result.soll)) m.bodyEl.querySelector('[name="soll"]').value = result.soll;
             if (kontoMap.get(result.haben)) m.bodyEl.querySelector('[name="haben"]').value = result.haben;

@@ -5,7 +5,7 @@
 import { api } from '../api.js';
 import { state, reloadJahre } from '../main.js';
 import { escapeHtml, formatChf, formatDate, todayIso, parseHash } from '../utils.js';
-import { modal, toast, confirmDialog } from '../components.js';
+import { modal, toast, confirmDialog, enhanceSelect } from '../components.js';
 import { analyzeBelegFromUrl, hasApiKey } from '../ai.js';
 import { startInboxPrefetch, onPrefetchProgress, isPrefetchRunning } from '../inboxPrefetch.js';
 
@@ -136,7 +136,7 @@ export default {
           ? `<a href="${escapeHtml(p.firebaseUrl)}" target="_blank" rel="noopener">${fileIcon(p.fileType, p.fileName)} ${escapeHtml(p.fileName || 'Beleg')}</a>`
           : '<span class="muted small">—</span>';
         return `
-          <tr>
+          <tr class="row-clickable" data-open-row="${escapeHtml(p.id)}">
             <td>${escapeHtml(formatDate(eingang))}</td>
             <td>
               <strong>${escapeHtml(p.title || p.fileName || 'Beleg')}</strong>
@@ -195,10 +195,14 @@ export default {
     setTimeout(() => startInboxPrefetch(), 300);
 
     tbody.addEventListener('click', async (e) => {
+      // Klick auf den Verbuchen-Button (Standardfall)
       const openId = e.target?.dataset?.open;
-      if (openId) {
-        await openEntry(openId);
-      }
+      if (openId) { await openEntry(openId); return; }
+      // Klick irgendwo in der Zeile → ebenfalls öffnen, aber nicht wenn auf
+      // den Datei-Link geklickt wurde (der soll separat im neuen Tab aufgehen).
+      if (e.target.closest('a')) return;
+      const row = e.target.closest('[data-open-row]');
+      if (row) await openEntry(row.dataset.openRow);
     });
 
     async function openEntry(spArId) {
@@ -310,6 +314,11 @@ export default {
       m.bodyEl.querySelector('[name="soll"]').value = initialDraft.soll || '';
       m.bodyEl.querySelector('[name="haben"]').value = initialDraft.haben || '';
 
+      // Selects zu durchsuchbaren Comboboxes aufwerten – User kann nach
+      // Nummer ODER Bezeichnung tippen.
+      enhanceSelect(m.bodyEl.querySelector('[name="soll"]'), { placeholder: 'Soll-Konto suchen…' });
+      enhanceSelect(m.bodyEl.querySelector('[name="haben"]'), { placeholder: 'Haben-Konto suchen…' });
+
       const aiInfo = m.bodyEl.querySelector('#ai-info');
       const aiStatus = m.bodyEl.querySelector('#ai-status');
       const bezahltCb = m.bodyEl.querySelector('[name="bezahlt"]');
@@ -352,14 +361,27 @@ export default {
         }
       }
 
+      // Historische Buchungen für die KI (lernt aus den Mustern) – aus allen
+      // Geschäftsjahren zusammengezogen.
+      async function loadHistoricBuchungen() {
+        const jahre = await api.listJahre().catch(() => []);
+        const all = [];
+        for (const j of jahre) {
+          try { all.push(...(await api.listBuchungen(j.jahr))); } catch {}
+        }
+        return all;
+      }
+
       // KI sofort beim Öffnen ausführen, falls noch nicht im Cache
       if (hasApiKey() && portal.firebaseUrl && portal.firebaseUrl.startsWith('http')) {
         if (aiResult) {
           applyAi(aiResult);
           aiStatus.innerHTML = `KI-Analyse aus Cache: <strong>${escapeHtml(aiResult.vendor || aiResult.beschreibung || '—')}</strong>${aiResult.ist_einnahme ? ' (Einnahme)' : ' (Ausgabe)'}.`;
         } else {
-          aiStatus.textContent = 'KI analysiert Beleg…';
-          analyzeBelegFromUrl(api.belegProxyUrl(spArId), konten)
+          aiStatus.textContent = 'KI analysiert Beleg (mit Buchungs-Historie als Kontext)…';
+          loadHistoricBuchungen().then((buchungen) =>
+            analyzeBelegFromUrl(api.belegProxyUrl(spArId), konten, buchungen)
+          )
             .then(async (res) => {
               aiResult = res;
               applyAi(res);

@@ -808,3 +808,72 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shado
   box-shadow: 0 2px 8px rgba(109, 40, 217, 0.25);
 }
 .ai-chat-input button.send:disabled { opacity: 0.45; }
+
+/* ============ Combobox (durchsuchbare Konto-Auswahl) ============ */
+.combo { position: relative; width: 100%; }
+.combo-input {
+  width: 100%;
+  padding: 9px 28px 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: white;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--color-text);
+}
+.combo-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(200, 16, 46, 0.12);
+}
+.combo-clear {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
+}
+.combo-clear:hover { background: var(--color-bg); transform: translateY(-50%); box-shadow: none; }
+.combo-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  z-index: 200;
+  font-size: 13.5px;
+}
+.combo-opt {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.combo-opt:last-child { border-bottom: none; }
+.combo-opt.highlight { background: var(--color-primary-light); color: var(--color-primary-dark); }
+.combo-opt.selected { font-weight: 600; }
+.combo-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+/* ============ Klickbare Inbox-Zeilen ============ */
+table.data tr.row-clickable { cursor: pointer; }
+table.data tr.row-clickable:hover td { background: var(--color-primary-light); }
