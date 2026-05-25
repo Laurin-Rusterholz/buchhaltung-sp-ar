@@ -139,31 +139,46 @@ export function summarizeBuchungen(buchungen, konten, limit = 50) {
 // === Buchungsvorschlag aus Beschreibung ===
 // `buchungen` (optional): bisherige Buchungen – die KI lernt aus den Mustern.
 export async function suggestBuchung({ beschreibung, betrag, datum, konten, buchungen }) {
-  const list = konten
-    .map((k) => `${k.nummer} ${k.bezeichnung} [${k.typ}]`)
+  // Aktiv + Passiv kommen direkt mit (alle Bilanzkonten), Aufwand/Ertrag
+  // getrennt sortiert (spezifisch zuerst, Sammelkonten unten).
+  const bilanz = konten.filter((k) => k.typ === 'aktiv' || k.typ === 'passiv')
+    .sort((a, b) => a.nummer.localeCompare(b.nummer))
+    .map((k) => `- ${k.nummer} ${k.bezeichnung} [${k.typ}${k.kategorie ? ' / ' + k.kategorie : ''}]`)
     .join('\n');
+  const aufwandErtragBlock = formatKontenForAI(konten);
   const historie = summarizeBuchungen(buchungen, konten);
   const prompt = `Du bist Buchhalter:in eines Schweizer Vereins. Schlage für folgenden Geschäftsvorfall die korrekte Doppelbuchung vor.
 
-Vorgang: "${beschreibung}"
+## Vorgang
+"${beschreibung}"
 ${betrag ? `Betrag: CHF ${betrag}` : ''}
 ${datum ? `Datum: ${datum}` : ''}
 
-${historie ? `Bisherige Buchungen aus der Buchhaltung (lerne aus diesen Mustern – wenn ein ähnlicher Vorgang schon gebucht wurde, schlage dieselben Konten vor):\n${historie}\n` : ''}
+## Konto-Wahl – wichtig!
+1. Erkenne Schlüsselwörter im Vorgang ("DV", "Vorstand", "Wahlen", "Mitgliedschaft", "Druck", "Bank", "Porto", etc.) und wähle das SPEZIFISCHSTE passende Konto.
+2. Sammelkonten ("Sonstig…", "Übrig…", "Divers…", "Allgemein…") sind LETZTE OPTION – nur wenn KEIN spezifisches Konto passt UND in der "begruendung" begründet.
+3. Konsistenz mit historischen Buchungen: wenn ein ähnlicher Vorgang schon gebucht wurde, nutze dasselbe Konto.
 
-Verfügbare Konten:
-${list}
+Buchungsregel: Aktiv- und Aufwand-Zugänge ins Soll; Passiv- und Ertrag-Zugänge ins Haben.
 
-Antworte AUSSCHLIESSLICH mit folgendem JSON, ohne weitere Erklärungen:
+## Antwort-Format (AUSSCHLIESSLICH dieses JSON):
 {
   "soll": "<Kontonummer aus Liste>",
   "haben": "<Kontonummer aus Liste>",
   "betrag": <Zahl, oder null>,
-  "beschreibung": "<verfeinerte Beschreibung>",
-  "begruendung": "<sehr kurze Erklärung warum>"
+  "beschreibung": "<verfeinerte Beschreibung, die den Anlass / Verwendungszweck nennt>",
+  "begruendung": "<sehr kurze Erklärung warum genau dieses Konto>"
 }
 
-Wichtig: Aktiv- und Aufwand-Zugänge ins Soll; Passiv- und Ertrag-Zugänge ins Haben.`;
+## Aufwand-/Ertragskonten
+${aufwandErtragBlock}
+
+## Bilanz-Konten (Aktiv + Passiv)
+${bilanz}
+
+${historie ? `## Bisherige Buchungen (Lerne aus diesen Mustern – ähnlicher Vorgang ⇒ dasselbe Konto)\n${historie}\n` : ''}
+
+WICHTIG: Wenn du ein Sammelkonto vorschlägst, prüfe nochmal ob nicht doch ein spezifisches Konto besser passt.`;
 
   const text = await callClaude([{ text: prompt }]);
   const result = extractJson(text);
@@ -193,46 +208,100 @@ export async function analyzeBelegFromUrl(url, konten, buchungen) {
   return analyzeBelegInternal(mime, data, konten, buchungen);
 }
 
+// Sammelkonto-Erkennung: Konten deren Bezeichnung auf eine generische
+// "übrig/sonstig/divers"-Rolle hindeutet. Diese werden im KI-Prompt nach
+// unten sortiert UND explizit als "letzte Option" markiert, damit die KI
+// nicht reflexhaft darauf zurückfällt.
+const SAMMELKONTO_REGEX = /\b(sonstig|sonstige[rs]?|übrig|uebrig|übrige[rs]?|uebrige[rs]?|diverse[rs]?|allgemein|allgemeine[rs]?|nicht\s+zuordenbar|misc)\b/i;
+function isSammelkonto(k) {
+  return SAMMELKONTO_REGEX.test(k.bezeichnung);
+}
+
+// Formatiert die Aufwand/Ertrag-Konten für die KI: spezifische Konten
+// zuerst (sortiert nach Nummer), Sammelkonten klar getrennt darunter
+// als "FALLBACK".
+function formatKontenForAI(konten) {
+  const aufwandErtrag = konten.filter((k) => k.typ === 'aufwand' || k.typ === 'ertrag');
+  const spezifisch = aufwandErtrag.filter((k) => !isSammelkonto(k))
+    .sort((a, b) => a.nummer.localeCompare(b.nummer));
+  const sammel = aufwandErtrag.filter((k) => isSammelkonto(k))
+    .sort((a, b) => a.nummer.localeCompare(b.nummer));
+  const fmt = (k) => `- ${k.nummer} ${k.bezeichnung} [${k.typ}${k.kategorie ? ' / ' + k.kategorie : ''}]`;
+  let out = '## SPEZIFISCHE Konten (bevorzugt verwenden):\n';
+  out += spezifisch.map(fmt).join('\n');
+  if (sammel.length) {
+    out += '\n\n## SAMMELKONTEN – NUR als letzte Option, wenn KEIN spezifisches Konto passt:\n';
+    out += sammel.map(fmt).join('\n');
+  }
+  return out;
+}
+
 async function analyzeBelegInternal(mimeType, base64Data, konten, buchungen) {
-  const aufwandErtrag = konten
-    .filter((k) => k.typ === 'aufwand' || k.typ === 'ertrag')
-    .map((k) => `${k.nummer} ${k.bezeichnung} [${k.typ}]`)
-    .join('\n');
+  const aufwandErtragBlock = formatKontenForAI(konten);
   const liquide = konten
     .filter((k) => k.typ === 'aktiv')
-    .map((k) => `${k.nummer} ${k.bezeichnung}`)
+    .map((k) => `- ${k.nummer} ${k.bezeichnung}${k.kategorie ? ' [' + k.kategorie + ']' : ''}`)
     .join('\n');
 
-  const prompt = `Analysiere diesen Beleg und schlage eine vollständige Doppelbuchung vor.
+  const prompt = `Analysiere diesen Beleg und schlage die korrekte Doppelbuchung vor.
 
-Regel:
-- Bei einer AUSGABE/Quittung: Soll = Aufwandkonto, Haben = Zahlmittel (Bank/Kasse)
-- Bei einer EINNAHME: Soll = Zahlmittel (Bank/Kasse), Haben = Ertragskonto
+## Buchungsregel
+- AUSGABE/Quittung: Soll = Aufwandkonto, Haben = Zahlmittel (Bank/Kasse) ODER Verbindlichkeit
+- EINNAHME: Soll = Zahlmittel (Bank/Kasse), Haben = Ertragskonto
 
-Antworte AUSSCHLIESSLICH mit folgendem JSON, ohne Erklärung:
+## Konto-Wahl – wichtig, lies sorgfältig!
+Geh in dieser Reihenfolge vor:
+
+1. **Schlüsselwörter erkennen.** Lies den Beleg und die Beschreibung des Einreichers genau. Achte auf Anlass-/Kontext-Hinweise wie:
+   - "DV", "Delegierten*", "Delegiertenversammlung" → gehört auf das Delegiertenversammlungs-Konto
+   - "Parteitag", "PT" → Parteitag-Konto
+   - "Vorstand", "Sitzung", "VS" → Vorstand-Konto
+   - "Wahlen", "Wahlkampf", "Kampagne" → Wahl-Konto
+   - "Mitgliedschaft", "Beitrag SPS" → Mitgliedschaftsbeiträge-Konto
+   - "Geschenk", "Blumen", "Apéro" + Anlass-Wort → das jeweilige Anlass-Konto (NICHT Sammelkonto!)
+   - "Druckerei", "Flyer", "Plakat" → Drucksachen-/Werbematerial
+   - "Porto", "Briefmarken" → Porto
+   - "IT", "Server", "Domain", "Hosting" → Informatik
+   - "Bank", "Spesen", "Gebühr" + Bank-Bezug → Bankspesen
+
+2. **Wähle das SPEZIFISCHSTE passende Konto.** Wenn z.B. ein Restaurant-Beleg "Geschenk DV" als Verwendung hat, gehört er auf "Delegiertenversammlungen" – NICHT auf "Veranstaltungen allgemein" und ERST RECHT NICHT auf "Sonstiger Betriebsaufwand".
+
+3. **Sammelkonten sind eine LETZTE OPTION.** "Sonstig…", "Übrig…", "Diverse…", "Allgemein…" wählst du NUR wenn:
+   (a) wirklich kein spezifisches Konto sinnvoll passt UND
+   (b) du das in der "begruendung" explizit begründest.
+   Sie sind unten als "SAMMELKONTEN" markiert.
+
+4. **Historische Buchungen sind dein wichtigster Hinweis.** Wenn ein ähnlicher Vorgang (gleiche Beschreibung, gleicher Vendor, gleicher Anlass) bereits gebucht wurde, nutze DASSELBE Konto. Konsistenz ist wichtiger als marginale Verbesserung.
+
+5. **Bei Mehrdeutigkeit:** wähle das Konto, dessen Bezeichnung dem Anlass am nächsten kommt. Z.B. bei "Apéro-Einkauf für Parteitag" → Parteitag-Konto (auch wenn es ein Lebensmittel-Beleg ist).
+
+## Antwort-Format (AUSSCHLIESSLICH dieses JSON, ohne Erklärung drumherum):
 {
   "datum": "<YYYY-MM-DD, Belegdatum>",
   "faelligkeit": "<YYYY-MM-DD. Wenn auf dem Beleg ein Fälligkeits-/Zahlungsziel steht (z.B. 'Zahlbar bis…', 'Fällig am…'), nimm das. Wenn der Beleg bereits BEZAHLT ist (Quittung, 'bezahlt am…', Kassenbon), nimm das Bezahldatum/Belegdatum. Sonst null.>",
   "betrag": <Zahl in CHF, positiv>,
   "vendor": "<Verkäufer / Anbieter>",
   "beleg_nr": "<Rechnungs-/Belegnummer wie auf dem Beleg gedruckt (z.B. 'R-2026-0123', '1234567'). Wenn keine erkennbar, null.>",
-  "beschreibung": "<kurze Beschreibung des Vorgangs>",
+  "beschreibung": "<kurze Beschreibung des Vorgangs, der den Anlass / Verwendungszweck nennt – nicht nur den Vendor>",
   "ist_einnahme": <true wenn Einnahme, false wenn Ausgabe>,
   "bezahlt": <true wenn der Beleg BEREITS BEZAHLT ist (Quittung, Kassenbon, Barzahlung, Kontoauszug, Lastschriftbeleg, 'bezahlt am…' steht drauf, oder Zahlmittel = Bank/Kasse). false wenn es eine offene Rechnung ist mit Zahlungsziel in der Zukunft.>,
   "konto_soll": "<Kontonummer>",
   "konto_haben": "<Kontonummer>",
+  "begruendung": "<sehr kurze Erklärung warum genau dieses Konto gewählt wurde – besonders wichtig wenn ein Sammelkonto verwendet wird>",
   "tags": "<kommagetrennte Stichworte, max 3>"
 }
 
-Aufwand/Ertrag-Konten:
-${aufwandErtrag}
+## Verfügbare Aufwand-/Ertragskonten
+${aufwandErtragBlock}
 
-Zahlmittel / Aktivkonten (Bank, Kasse, …):
+## Zahlmittel-/Aktivkonten (Bank, Kasse, …)
 ${liquide}
 
-${summarizeBuchungen(buchungen, konten) ? `Bisherige Buchungen (lerne aus diesen Mustern – wenn ein ähnlicher Beleg / Vendor schon gebucht wurde, schlage dieselben Konten vor):\n${summarizeBuchungen(buchungen, konten)}\n` : ''}
+${summarizeBuchungen(buchungen, konten) ? `## Bisherige Buchungen (Lerne aus diesen Mustern – ähnlicher Vorgang ⇒ dasselbe Konto)\n${summarizeBuchungen(buchungen, konten)}\n` : ''}
 
-Verwende AUSSCHLIESSLICH Kontonummern aus den obigen Listen.`;
+Verwende AUSSCHLIESSLICH Kontonummern aus den obigen Listen.
+
+WICHTIG: Wenn du ein Sammelkonto ("Sonstig…", "Übrig…", "Divers…") wählst, prüfe nochmal ob nicht doch ein spezifisches Konto besser passt. Das ist der häufigste Fehler – falle nicht darauf zurück.`;
 
   const text = await callClaude([
     { text: prompt },

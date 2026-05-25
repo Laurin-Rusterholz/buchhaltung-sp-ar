@@ -510,7 +510,10 @@ export default {
           if (res.konto_haben) tags.push(`Haben: <strong>${escapeHtml(res.konto_haben)} ${escapeHtml(kontoMap.get(res.konto_haben)?.bezeichnung || '')}</strong>`);
           if (res.beleg_nr) tags.push(`Beleg-Nr: <strong>${escapeHtml(res.beleg_nr)}</strong>`);
           if (res.bezahlt === true) tags.push('<strong>bereits bezahlt</strong>');
-          aiStatus.innerHTML = '✓ KI-Vorschlag: ' + tags.join(' · ');
+          const begruendung = res.begruendung
+            ? `<div class="muted small mt-2"><strong>Begründung:</strong> ${escapeHtml(res.begruendung)}</div>`
+            : '';
+          aiStatus.innerHTML = '✓ KI-Vorschlag: ' + tags.join(' · ') + begruendung;
           try { await api.saveInboxEntry(spArId, { aiResult: res }); } catch (e) { console.warn(e); }
         } catch (err) {
           aiStatus.innerHTML = `<span style="color:var(--color-danger)">KI-Fehler: ${escapeHtml(err.message)}</span>`;
