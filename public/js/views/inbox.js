@@ -321,7 +321,7 @@ export default {
           aiStatus.innerHTML = `KI-Analyse aus Cache: <strong>${escapeHtml(aiResult.vendor || aiResult.beschreibung || '—')}</strong>${aiResult.ist_einnahme ? ' (Einnahme)' : ' (Ausgabe)'}.`;
         } else {
           aiStatus.textContent = 'KI analysiert Beleg…';
-          analyzeBelegFromUrl(portal.firebaseUrl, konten)
+          analyzeBelegFromUrl(api.belegProxyUrl(spArId), konten)
             .then(async (res) => {
               aiResult = res;
               applyAi(res);

@@ -578,6 +578,13 @@ export const api = {
     const data = await r.json();
     return Array.isArray(data.belege) ? data.belege : [];
   },
+  // CORS-Proxy-URL für die Beleg-Datei. Direkter fetch() auf Firebase Storage
+  // wird vom Browser geblockt (kein Access-Control-Allow-Origin auf dem Bucket),
+  // daher gehen alle Beleg-Downloads für die KI-Analyse über diesen Proxy
+  // (sp-ar-belege Netlify Function, die die Datei aus Firebase Storage zieht
+  // und mit CORS:* an buchhaltung-sp-ar zurückliefert).
+  belegProxyUrl: (spArId) =>
+    `${BELEG_PORTAL_URL}/.netlify/functions/beleg-proxy?id=${encodeURIComponent(spArId)}`,
   // Markiert einen Beleg im Portal (Status / Buchungs-Referenz).
   markPortalBeleg: async (spArId, payload) => {
     const url = `${BELEG_PORTAL_URL}/.netlify/functions/beleg-list?action=mark`;
