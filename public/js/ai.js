@@ -218,6 +218,7 @@ Antworte AUSSCHLIESSLICH mit folgendem JSON, ohne Erklärung:
   "beleg_nr": "<Rechnungs-/Belegnummer wie auf dem Beleg gedruckt (z.B. 'R-2026-0123', '1234567'). Wenn keine erkennbar, null.>",
   "beschreibung": "<kurze Beschreibung des Vorgangs>",
   "ist_einnahme": <true wenn Einnahme, false wenn Ausgabe>,
+  "bezahlt": <true wenn der Beleg BEREITS BEZAHLT ist (Quittung, Kassenbon, Barzahlung, Kontoauszug, Lastschriftbeleg, 'bezahlt am…' steht drauf, oder Zahlmittel = Bank/Kasse). false wenn es eine offene Rechnung ist mit Zahlungsziel in der Zukunft.>,
   "konto_soll": "<Kontonummer>",
   "konto_haben": "<Kontonummer>",
   "tags": "<kommagetrennte Stichworte, max 3>"

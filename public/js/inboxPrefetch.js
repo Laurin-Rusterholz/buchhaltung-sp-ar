@@ -52,7 +52,15 @@ export function startInboxPrefetch({ silent = true } = {}) {
         if (p.status === 'abgeschlossen') return false;
         const local = inboxState[p.id];
         // Schon analysiert? Skip.
-        if (local?.aiResult) { skipped++; return false; }
+        if (local?.aiResult) {
+          // Veraltete Caches (altes Schema – kein beleg_nr/bezahlt-Feld)
+          // neu analysieren, damit alle Felder ausgefüllt sind.
+          const stale = !('beleg_nr' in local.aiResult) || !('bezahlt' in local.aiResult);
+          if (!stale) { skipped++; return false; }
+          // Wenn schon verbucht: nicht mehr anrühren.
+          if (local.buchungId) { skipped++; return false; }
+          return true;
+        }
         // Schon verbucht? Skip.
         if (local?.buchungId) { skipped++; return false; }
         return true;

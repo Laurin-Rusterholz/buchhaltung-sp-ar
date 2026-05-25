@@ -347,6 +347,7 @@ export default {
         body: `
           <div class="ai-result mb-4" id="ai-info" style="display:${hasApiKey() ? 'block' : 'none'}">
             <span id="ai-status">${aiResult ? 'KI-Analyse aus Cache geladen.' : 'KI analysiert Beleg…'}</span>
+            <button type="button" id="ai-reanalyze" class="sm ai" style="float:right;margin-left:8px">↻ Neu analysieren</button>
           </div>
           ${!hasApiKey() ? '<div class="ai-hint muted small mb-4">Hinweis: Kein Claude API-Key in den Einstellungen → KI-Vorschläge sind deaktiviert.</div>' : ''}
 
@@ -453,6 +454,25 @@ export default {
         if (result.konto_haben && kontoMap.get(result.konto_haben) && !fields.querySelector('[name="haben"]').value) {
           fields.querySelector('[name="haben"]').value = result.konto_haben;
         }
+        // Bezahlt: explizit aus KI (neueres Schema) ODER implizit erkennen
+        // anhand des Haben-Kontos. Wenn das Haben-Konto ein Aktivkonto
+        // (Bank/Kasse) ist, wurde direkt bezahlt – das gilt sowohl für
+        // Quittungen als auch für Banküberweisungen aus dem Kontoauszug.
+        const bezahltCb = fields.querySelector('[name="bezahlt"]');
+        if (bezahltCb && !bezahltCb.checked) {
+          let shouldCheck = false;
+          if (result.bezahlt === true) shouldCheck = true;
+          else {
+            const habenNr = fields.querySelector('[name="haben"]').value || result.konto_haben;
+            const habenKto = habenNr ? kontoMap.get(habenNr) : null;
+            if (habenKto?.typ === 'aktiv') shouldCheck = true;
+          }
+          if (shouldCheck) {
+            bezahltCb.checked = true;
+            // Verbuchen-Button-State neu setzen
+            bezahltCb.dispatchEvent(new Event('change'));
+          }
+        }
       }
 
       // Historische Buchungen für die KI (lernt aus den Mustern) – aus allen
@@ -466,30 +486,58 @@ export default {
         return all;
       }
 
+      // Helper: Cache ist veraltet wenn alte Schema-Felder fehlen
+      function isStaleCache(r) {
+        if (!r) return false;
+        // beleg_nr und bezahlt wurden später hinzugefügt – fehlende Felder
+        // signalisieren ein älteres Analyse-Resultat.
+        return !('beleg_nr' in r) || !('bezahlt' in r);
+      }
+
+      // Eigentlicher KI-Aufruf (extrahiert, damit Re-Analyse das gleiche
+      // tun kann ohne Code-Duplikation).
+      async function runAi() {
+        aiStatus.textContent = 'KI analysiert Beleg (mit Buchungs-Historie als Kontext)…';
+        try {
+          const buchungen = await loadHistoricBuchungen();
+          const res = await analyzeBelegFromUrl(api.belegProxyUrl(spArId), konten, buchungen);
+          aiResult = res;
+          applyAi(res);
+          const tags = [];
+          if (res.vendor) tags.push(`Anbieter: <strong>${escapeHtml(res.vendor)}</strong>`);
+          if (res.betrag) tags.push(`Betrag: <strong>CHF ${escapeHtml(formatChf(res.betrag))}</strong>`);
+          if (res.konto_soll) tags.push(`Soll: <strong>${escapeHtml(res.konto_soll)} ${escapeHtml(kontoMap.get(res.konto_soll)?.bezeichnung || '')}</strong>`);
+          if (res.konto_haben) tags.push(`Haben: <strong>${escapeHtml(res.konto_haben)} ${escapeHtml(kontoMap.get(res.konto_haben)?.bezeichnung || '')}</strong>`);
+          if (res.beleg_nr) tags.push(`Beleg-Nr: <strong>${escapeHtml(res.beleg_nr)}</strong>`);
+          if (res.bezahlt === true) tags.push('<strong>bereits bezahlt</strong>');
+          aiStatus.innerHTML = '✓ KI-Vorschlag: ' + tags.join(' · ');
+          try { await api.saveInboxEntry(spArId, { aiResult: res }); } catch (e) { console.warn(e); }
+        } catch (err) {
+          aiStatus.innerHTML = `<span style="color:var(--color-danger)">KI-Fehler: ${escapeHtml(err.message)}</span>`;
+        }
+      }
+
+      // "↻ Neu analysieren" Button: ignoriert Cache, löscht den Cache-Eintrag
+      // und ruft die KI nochmal mit aktuellem Prompt-Schema auf.
+      const reanalyzeBtn = m.bodyEl.querySelector('#ai-reanalyze');
+      if (reanalyzeBtn) {
+        reanalyzeBtn.onclick = async () => {
+          reanalyzeBtn.disabled = true;
+          aiResult = null;
+          try { await api.saveInboxEntry(spArId, { aiResult: null }); } catch {}
+          await runAi();
+          reanalyzeBtn.disabled = false;
+        };
+      }
+
       // KI sofort beim Öffnen ausführen, falls noch nicht im Cache
       if (hasApiKey() && portal.firebaseUrl && portal.firebaseUrl.startsWith('http')) {
         if (aiResult) {
           applyAi(aiResult);
-          aiStatus.innerHTML = `KI-Analyse aus Cache: <strong>${escapeHtml(aiResult.vendor || aiResult.beschreibung || '—')}</strong>${aiResult.ist_einnahme ? ' (Einnahme)' : ' (Ausgabe)'}.`;
+          const stale = isStaleCache(aiResult);
+          aiStatus.innerHTML = `KI-Analyse aus Cache: <strong>${escapeHtml(aiResult.vendor || aiResult.beschreibung || '—')}</strong>${aiResult.ist_einnahme ? ' (Einnahme)' : ' (Ausgabe)'}.${stale ? ' <span style="color:var(--color-warning);font-weight:600">⚠ veraltet – bitte "↻ Neu analysieren" klicken</span>' : ''}`;
         } else {
-          aiStatus.textContent = 'KI analysiert Beleg (mit Buchungs-Historie als Kontext)…';
-          loadHistoricBuchungen().then((buchungen) =>
-            analyzeBelegFromUrl(api.belegProxyUrl(spArId), konten, buchungen)
-          )
-            .then(async (res) => {
-              aiResult = res;
-              applyAi(res);
-              const tags = [];
-              if (res.vendor) tags.push(`Anbieter: <strong>${escapeHtml(res.vendor)}</strong>`);
-              if (res.betrag) tags.push(`Betrag: <strong>CHF ${escapeHtml(formatChf(res.betrag))}</strong>`);
-              if (res.konto_soll) tags.push(`Soll: <strong>${escapeHtml(res.konto_soll)} ${escapeHtml(kontoMap.get(res.konto_soll)?.bezeichnung || '')}</strong>`);
-              if (res.konto_haben) tags.push(`Haben: <strong>${escapeHtml(res.konto_haben)} ${escapeHtml(kontoMap.get(res.konto_haben)?.bezeichnung || '')}</strong>`);
-              aiStatus.innerHTML = '✓ KI-Vorschlag: ' + tags.join(' · ');
-              try { await api.saveInboxEntry(spArId, { aiResult: res }); } catch (e) { console.warn(e); }
-            })
-            .catch((err) => {
-              aiStatus.innerHTML = `<span style="color:var(--color-danger)">KI-Fehler: ${escapeHtml(err.message)}</span>`;
-            });
+          runAi();
         }
       } else if (!portal.firebaseUrl) {
         aiInfo.style.display = 'none';
