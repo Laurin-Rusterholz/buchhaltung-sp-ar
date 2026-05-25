@@ -1,8 +1,21 @@
-// Gemini-API-Anbindung. API-Key liegt im LocalStorage (nicht in Firebase),
-// damit jeder Browser seinen eigenen Schlüssel hat.
+// KI-Anbindung mit Provider-Dispatch (Gemini + Claude).
+// API-Keys liegen im LocalStorage (nicht in Firebase), damit jeder Browser
+// seinen eigenen Schlüssel hat.
 
 import { DEFAULT_KONTENPLAN } from './defaults.js';
 
+// ===== Provider-Auswahl =====
+const PROVIDER_STORAGE = 'buchhaltung_ai_provider';
+
+export function getProvider() {
+  const p = localStorage.getItem(PROVIDER_STORAGE);
+  return p === 'claude' || p === 'gemini' ? p : 'gemini';
+}
+export function setProvider(p) {
+  if (p === 'claude' || p === 'gemini') localStorage.setItem(PROVIDER_STORAGE, p);
+}
+
+// ===== Gemini =====
 const KEY_STORAGE = 'buchhaltung_gemini_key';
 const MODEL_STORAGE = 'buchhaltung_gemini_model';
 const DEFAULT_MODEL = 'gemini-1.5-flash';
@@ -10,23 +23,99 @@ const DEFAULT_MODEL = 'gemini-1.5-flash';
 export function getApiKey() {
   return localStorage.getItem(KEY_STORAGE) || '';
 }
-
 export function setApiKey(k) {
   if (k) localStorage.setItem(KEY_STORAGE, String(k).trim());
   else localStorage.removeItem(KEY_STORAGE);
 }
-
-export function hasApiKey() {
-  return !!getApiKey();
-}
-
 export function getModel() {
   return localStorage.getItem(MODEL_STORAGE) || DEFAULT_MODEL;
 }
-
 export function setModel(m) {
   if (m) localStorage.setItem(MODEL_STORAGE, m);
   else localStorage.removeItem(MODEL_STORAGE);
+}
+
+// ===== Claude =====
+const CLAUDE_KEY_STORAGE = 'buchhaltung_claude_key';
+const CLAUDE_MODEL_STORAGE = 'buchhaltung_claude_model';
+const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
+const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
+
+export function getClaudeApiKey() {
+  return localStorage.getItem(CLAUDE_KEY_STORAGE) || '';
+}
+export function setClaudeApiKey(k) {
+  if (k) localStorage.setItem(CLAUDE_KEY_STORAGE, String(k).trim());
+  else localStorage.removeItem(CLAUDE_KEY_STORAGE);
+}
+export function getClaudeModel() {
+  return localStorage.getItem(CLAUDE_MODEL_STORAGE) || DEFAULT_CLAUDE_MODEL;
+}
+export function setClaudeModel(m) {
+  if (m) localStorage.setItem(CLAUDE_MODEL_STORAGE, m);
+  else localStorage.removeItem(CLAUDE_MODEL_STORAGE);
+}
+
+// Aktiver Provider hat einen Key hinterlegt?
+export function hasApiKey() {
+  return getProvider() === 'claude' ? !!getClaudeApiKey() : !!getApiKey();
+}
+
+// Wandelt unsere interne Gemini-ähnliche Parts-Liste in Claude content um.
+// {text} → text-Block; {inline_data: {mime_type, data}} → image/document-Block.
+function partsToClaudeContent(parts) {
+  return parts.map((p) => {
+    if (p.text != null) return { type: 'text', text: p.text };
+    if (p.inline_data) {
+      const mime = p.inline_data.mime_type;
+      const data = p.inline_data.data;
+      if (mime === 'application/pdf') {
+        return { type: 'document', source: { type: 'base64', media_type: mime, data } };
+      }
+      if (mime?.startsWith('image/')) {
+        return { type: 'image', source: { type: 'base64', media_type: mime, data } };
+      }
+    }
+    return null;
+  }).filter(Boolean);
+}
+
+async function callClaude(parts, generationConfig = {}) {
+  const key = getClaudeApiKey();
+  if (!key) throw new Error('Claude API Key fehlt – in den Einstellungen hinterlegen.');
+  const model = getClaudeModel();
+  const body = {
+    model,
+    max_tokens: generationConfig.maxTokens || 2048,
+    messages: [{ role: 'user', content: partsToClaudeContent(parts) }],
+  };
+  if (generationConfig.temperature != null) body.temperature = generationConfig.temperature;
+  const res = await fetch(CLAUDE_API_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      const err = await res.json();
+      msg = err?.error?.message || msg;
+    } catch {}
+    throw new Error(`Claude API: ${msg}`);
+  }
+  const data = await res.json();
+  return data.content?.find((b) => b.type === 'text')?.text || '';
+}
+
+// Generischer Dispatch: nutzt den aktiven Provider.
+async function callAi(parts, generationConfig = {}) {
+  if (getProvider() === 'claude') return callClaude(parts, generationConfig);
+  return callGemini(parts, generationConfig);
 }
 
 async function callGemini(parts, generationConfig = {}) {
@@ -123,7 +212,7 @@ Antworte AUSSCHLIESSLICH mit folgendem JSON, ohne weitere Erklärungen:
 
 Wichtig: Aktiv- und Aufwand-Zugänge ins Soll; Passiv- und Ertrag-Zugänge ins Haben.`;
 
-  const text = await callGemini([{ text: prompt }]);
+  const text = await callAi([{ text: prompt }]);
   const result = extractJson(text);
   if (!result.soll || !result.haben) throw new Error('AI lieferte keine vollständige Buchung');
   return result;
@@ -187,7 +276,7 @@ ${liquide}
 
 Verwende AUSSCHLIESSLICH Kontonummern aus den obigen Listen.`;
 
-  const text = await callGemini([
+  const text = await callAi([
     { text: prompt },
     { inline_data: { mime_type: mimeType, data: base64Data } },
   ]);
@@ -220,7 +309,7 @@ Antworte AUSSCHLIESSLICH mit folgendem JSON, ohne weitere Erklärung:
 
 typ muss exakt einer dieser Werte sein: "aktiv", "passiv", "ertrag", "aufwand".`;
 
-  const text = await callGemini([{ text: prompt }], { temperature: 0.4 });
+  const text = await callAi([{ text: prompt }], { temperature: 0.4 });
   const result = extractJson(text);
   if (!Array.isArray(result.konten)) throw new Error('Antwort enthält keine konten-Liste');
   // Validieren / normalisieren
@@ -265,7 +354,7 @@ Antworte AUSSCHLIESSLICH mit folgendem JSON, ohne weitere Erklärung:
 Verwende die Du-Form, Schweizer Schreibweise (ss statt ß), gendergerecht
 (z.B. "Liebe:r"). Halte den Ton freundlich aber sachlich.`;
 
-  const text = await callGemini([{ text: prompt }], { temperature: 0.6 });
+  const text = await callAi([{ text: prompt }], { temperature: 0.6 });
   return extractJson(text);
 }
 
@@ -322,7 +411,7 @@ Antworte AUSSCHLIESSLICH mit folgendem JSON-Format:
 
 Verwende nur Kontonummern aus der obigen Liste. Betrag in CHF, positiv (Vorzeichen ergibt sich aus typ).`;
 
-  const text = await callGemini([{ text: prompt }], { temperature: 0.3 });
+  const text = await callAi([{ text: prompt }], { temperature: 0.3 });
   const result = extractJson(text);
   if (!Array.isArray(result.positionen)) throw new Error('Antwort enthält keine positionen-Liste');
   return result.positionen
@@ -336,22 +425,16 @@ Verwende nur Kontonummern aus der obigen Liste. Betrag in CHF, positiv (Vorzeich
 
 // === Test-Verbindung ===
 export async function testConnection() {
-  const text = await callGemini([{ text: 'Antworte mit dem Wort: OK' }]);
+  const text = await callAi([{ text: 'Antworte mit dem Wort: OK' }]);
   return text.trim().includes('OK');
 }
 
 // === Chat-Assistent (mehrteilige Konversation) ===
 // Geschichte: Array von { role: 'user'|'assistant', text }
-// Optionaler systemContext: kompakter Snapshot der Buchhaltung als Markdown.
-export async function chat({ history, systemContext, userMessage }) {
-  const key = getApiKey();
-  if (!key) throw new Error('Gemini API Key fehlt – in den Einstellungen hinterlegen.');
-  const model = getModel();
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
-
-  const systemInstruction = {
-    parts: [{
-      text: `Du bist der freundliche, präzise Buchhaltungs-Assistent für einen Schweizer Verein (SP AR).
+// systemContext: kompakter Snapshot der Buchhaltung als Markdown (wird bei
+// Claude als separater cache-fähiger Block ausgeliefert → 90% billiger bei
+// Folgefragen innerhalb derselben Session).
+const CHAT_ROLE_PROMPT = `Du bist der freundliche, präzise Buchhaltungs-Assistent für einen Schweizer Verein (SP AR).
 Du kannst Fragen zur Vereinsbuchhaltung beantworten, Beträge aus den bereitgestellten Daten ablesen,
 Buchungsvorschläge machen und beim Verständnis der doppelten Buchführung helfen.
 
@@ -359,14 +442,28 @@ Antworte knapp, klar und auf Deutsch (Schweizer Konvention: ss statt ß).
 Verwende Markdown für Listen, Fettdruck und Code-Blöcke wenn sinnvoll.
 Wenn du eine Buchung vorschlägst, formatiere sie als: **Soll** Kto-Nr / **Haben** Kto-Nr / CHF Betrag.
 Erfinde keine Konten – nutze nur jene im Kontenplan.
-Wenn dir Informationen fehlen, frag konkret nach.
+Wenn dir Informationen fehlen, frag konkret nach.`;
+
+export async function chat({ history, systemContext, userMessage }) {
+  if (getProvider() === 'claude') return chatClaude({ history, systemContext, userMessage });
+  return chatGemini({ history, systemContext, userMessage });
+}
+
+async function chatGemini({ history, systemContext, userMessage }) {
+  const key = getApiKey();
+  if (!key) throw new Error('Gemini API Key fehlt – in den Einstellungen hinterlegen.');
+  const model = getModel();
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+
+  const systemInstruction = {
+    parts: [{
+      text: `${CHAT_ROLE_PROMPT}
 
 Aktueller Stand der Buchhaltung:
 ${systemContext || '(kein Kontext verfügbar)'}`
     }],
   };
 
-  // Gemini contents: alternierende user/model Nachrichten
   const contents = [];
   for (const h of history || []) {
     contents.push({
@@ -374,10 +471,7 @@ ${systemContext || '(kein Kontext verfügbar)'}`
       parts: [{ text: h.text }],
     });
   }
-  contents.push({
-    role: 'user',
-    parts: [{ text: userMessage }],
-  });
+  contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
   const body = {
     systemInstruction,
@@ -392,12 +486,70 @@ ${systemContext || '(kein Kontext verfügbar)'}`
   });
   if (!res.ok) {
     let msg = `${res.status}`;
-    try {
-      const err = await res.json();
-      msg = err?.error?.message || msg;
-    } catch {}
+    try { const err = await res.json(); msg = err?.error?.message || msg; } catch {}
     throw new Error(`Gemini API: ${msg}`);
   }
   const data = await res.json();
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+async function chatClaude({ history, systemContext, userMessage }) {
+  const key = getClaudeApiKey();
+  if (!key) throw new Error('Claude API Key fehlt – in den Einstellungen hinterlegen.');
+  const model = getClaudeModel();
+
+  // Multi-turn-Verlauf in Claude-Format: alternierende user/assistant Nachrichten.
+  const messages = [];
+  for (const h of history || []) {
+    messages.push({
+      role: h.role === 'assistant' ? 'assistant' : 'user',
+      content: h.text,
+    });
+  }
+  messages.push({ role: 'user', content: userMessage });
+
+  // system als Block-Array: stabile Rolle zuerst, danach der Buchhaltungs-Snapshot
+  // mit cache_control. Da der Snapshot innerhalb einer Session identisch bleibt
+  // und der Cache ein Prefix-Match ist, profitieren alle Folgefragen vom
+  // gecachten Snapshot (~90% Rabatt auf den gecachten Anteil).
+  const system = [
+    { type: 'text', text: CHAT_ROLE_PROMPT },
+    {
+      type: 'text',
+      text: `Aktueller Stand der Buchhaltung:\n${systemContext || '(kein Kontext verfügbar)'}`,
+      cache_control: { type: 'ephemeral' },
+    },
+  ];
+
+  const body = {
+    model,
+    max_tokens: 1500,
+    temperature: 0.4,
+    system,
+    messages,
+  };
+
+  const res = await fetch(CLAUDE_API_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try { const err = await res.json(); msg = err?.error?.message || msg; } catch {}
+    throw new Error(`Claude API: ${msg}`);
+  }
+  const data = await res.json();
+  // Hinweis im Konsolen-Log über Cache-Hits (Token-Telemetrie für Cost-Analyse)
+  if (data.usage) {
+    const hit = data.usage.cache_read_input_tokens || 0;
+    const write = data.usage.cache_creation_input_tokens || 0;
+    if (hit || write) console.debug(`[Claude cache] read=${hit} write=${write} input=${data.usage.input_tokens}`);
+  }
+  return data.content?.find((b) => b.type === 'text')?.text || '';
 }
