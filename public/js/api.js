@@ -79,19 +79,30 @@ export const api = {
   // referenzieren sie ggf. schon).
   seedKontenplan2026: async () => {
     const list = await api.listKonten();
-    const existing = new Set(list.map((k) => String(k.nummer)));
+    const byNr = new Map(list.map((k) => [String(k.nummer), k]));
     let added = 0;
+    let updated = 0;
     for (const k of KONTENPLAN_2026_ERGAENZUNGEN) {
-      if (!existing.has(String(k.nummer))) {
-        list.push(k);
+      const existing = byNr.get(String(k.nummer));
+      if (!existing) {
+        list.push({ ...k });
         added++;
+      } else {
+        // Bezeichnung / Typ / Kategorie auf Excel-Stand updaten, wenn sie
+        // abweichen. Bestehende Konten werden NICHT gelöscht (Buchungen
+        // könnten dranhängen), nur angepasst.
+        let changed = false;
+        if (existing.bezeichnung !== k.bezeichnung) { existing.bezeichnung = k.bezeichnung; changed = true; }
+        if (existing.typ !== k.typ) { existing.typ = k.typ; changed = true; }
+        if ((existing.kategorie || '') !== (k.kategorie || '')) { existing.kategorie = k.kategorie || ''; changed = true; }
+        if (changed) updated++;
       }
     }
-    if (added > 0) {
-      list.sort((a, b) => String(a.nummer).localeCompare(String(b.nummer)));
+    list.sort((a, b) => String(a.nummer).localeCompare(String(b.nummer)));
+    if (added > 0 || updated > 0) {
       await writeJson('kontenplan', list);
     }
-    return { added, total: list.length };
+    return { added, updated, total: list.length };
   },
 
   // ===== Geschäftsjahre =====

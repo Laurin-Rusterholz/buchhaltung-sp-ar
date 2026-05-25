@@ -195,26 +195,75 @@ Vorstand {{verein_name}}`,
   },
 ];
 
-// Zusätzliche Konten gemäss Budget 2026: erweitern den bestehenden Kontenplan
-// ohne bestehende Konten zu verändern. Wird via api.seedKontenplan2026()
-// nach-importiert (Helper fügt nur fehlende Nummern hinzu).
-export const KONTENPLAN_2026_ERGAENZUNGEN = [
+// Vollständiger Kontenplan SP AR 2026 – 1:1 aus dem Excel-Budget.
+// Wird via api.seedKontenplan2026() angewendet: bestehende Konten werden
+// auf diese Bezeichnung/Kategorie aktualisiert, fehlende werden ergänzt.
+// Konten die im aktuellen Plan stehen aber hier fehlen, bleiben unberührt
+// (Buchungen könnten dranhängen).
+export const KONTENPLAN_2026 = [
+  // === Aktiven ===
+  { nummer: '1000', bezeichnung: 'Kassa Einnahmen', typ: 'aktiv', kategorie: 'liquid' },
+  { nummer: '1020', bezeichnung: 'Raiffeisenbank Heiden', typ: 'aktiv', kategorie: 'liquid' },
+  { nummer: '1100', bezeichnung: 'Offene Forderungen', typ: 'aktiv', kategorie: 'forderungen' },
+  { nummer: '1200', bezeichnung: 'Aktive Rechnungsabgrenzung', typ: 'aktiv', kategorie: '' },
+  { nummer: '1500', bezeichnung: 'Mobiliar - Informatik', typ: 'aktiv', kategorie: 'anlage' },
+  // === Passiven ===
+  { nummer: '2000', bezeichnung: 'Verbindlichkeiten', typ: 'passiv', kategorie: '' },
+  { nummer: '2300', bezeichnung: 'Passive Rechnungsabgrenzung', typ: 'passiv', kategorie: '' },
+  { nummer: '2710', bezeichnung: 'Zweckgebunden Sekretariat 1 - SP AR', typ: 'passiv', kategorie: 'eigenkapital' },
+  { nummer: '2720', bezeichnung: 'Zweckgebunden Sekretariat 2 - SP AR / KR', typ: 'passiv', kategorie: 'eigenkapital' },
   { nummer: '2730', bezeichnung: 'Zweckgebunden Wahlen 2027', typ: 'passiv', kategorie: 'eigenkapital' },
-  { nummer: '3200', bezeichnung: 'Spenden / Vergabungen (allgemein)', typ: 'ertrag', kategorie: 'spenden' },
-  { nummer: '4220', bezeichnung: 'Fahrspesen Vorstand', typ: 'aufwand', kategorie: 'vorstand' },
+  // === Erträge ===
+  { nummer: '3001', bezeichnung: 'Sektionsbeiträge', typ: 'ertrag', kategorie: 'sektionsbeitraege' },
+  { nummer: '3002', bezeichnung: 'Beiträge Mandatsträger', typ: 'ertrag', kategorie: 'mitgliederbeitraege' },
+  { nummer: '3003', bezeichnung: 'div Zuwendungen Mitglieder', typ: 'ertrag', kategorie: 'mitgliederbeitraege' },
+  { nummer: '3200', bezeichnung: 'Spenden - Vergabungen (allgemein)', typ: 'ertrag', kategorie: 'spenden' },
+  { nummer: '3201', bezeichnung: 'Spenden - Vergabungen (Projekte)', typ: 'ertrag', kategorie: 'spenden' },
+  { nummer: '3202', bezeichnung: 'Abstimmungen - Wahlen 2027', typ: 'ertrag', kategorie: 'abstimmungen' },
+  { nummer: '3210', bezeichnung: 'Einnahmen Veranstaltungen', typ: 'ertrag', kategorie: '' },
+  { nummer: '3211', bezeichnung: 'Beitrag Kanton AR zGv SP-Fraktion', typ: 'ertrag', kategorie: '' },
+  // === Aufwand Sekretariat ===
+  { nummer: '4101', bezeichnung: 'Materialeinkauf', typ: 'aufwand', kategorie: 'sekretariat' },
+  { nummer: '4105', bezeichnung: 'Porto', typ: 'aufwand', kategorie: 'sekretariat' },
+  { nummer: '4106', bezeichnung: 'div. Spesen', typ: 'aufwand', kategorie: 'sekretariat' },
+  // === Aufwand Vorstand / Veranstaltungen ===
+  { nummer: '4210', bezeichnung: 'Aufwand Vorstand und Präsidium', typ: 'aufwand', kategorie: 'vorstand' },
+  { nummer: '4211', bezeichnung: 'Aufwand Delegiertenversammlungen', typ: 'aufwand', kategorie: 'vorstand' },
+  { nummer: '4212', bezeichnung: 'Aufwand Parteitage', typ: 'aufwand', kategorie: 'vorstand' },
+  { nummer: '4219', bezeichnung: 'Aufwand sonstige Veranstaltungen', typ: 'aufwand', kategorie: 'vorstand' },
+  { nummer: '4220', bezeichnung: 'Aufwand Fahrspesen Vorstand', typ: 'aufwand', kategorie: 'vorstand' },
+  { nummer: '4250', bezeichnung: 'Mitgliedschaften - Beiträge SPS', typ: 'aufwand', kategorie: 'mitgliedschaften' },
+  { nummer: '4251', bezeichnung: 'Mitgliedschaften - sonstige', typ: 'aufwand', kategorie: 'mitgliedschaften' },
+  // === Personal ===
+  { nummer: '5001', bezeichnung: 'Mandat Sekretariat SP AR', typ: 'aufwand', kategorie: 'personal' },
   { nummer: '5002', bezeichnung: 'Fraktion: Sekretariat und diverse Aufwände', typ: 'aufwand', kategorie: 'personal' },
-  { nummer: '5003', bezeichnung: 'Löhne AHV-pflichtig', typ: 'aufwand', kategorie: 'personal' },
-  { nummer: '5004', bezeichnung: 'Löhne nicht AHV-pflichtig', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '5003', bezeichnung: 'Löhne AHV pflichtig', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '5004', bezeichnung: 'Löhne nicht AHV pflichtig', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '5101', bezeichnung: 'AHV IV EO ALV', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '5102', bezeichnung: 'BVG', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '5103', bezeichnung: 'B-UV', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '5104', bezeichnung: 'KTV', typ: 'aufwand', kategorie: 'personal' },
   { nummer: '5201', bezeichnung: 'Aus- und Weiterbildung', typ: 'aufwand', kategorie: 'personal' },
-  { nummer: '5209', bezeichnung: 'Übriger Personalaufwand', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '5209', bezeichnung: 'übriger Personalaufwand', typ: 'aufwand', kategorie: 'personal' },
+  // === Übriger betrieblicher Aufwand ===
+  { nummer: '6210', bezeichnung: 'Informatik (Server, Lizenzen etc.)', typ: 'aufwand', kategorie: 'informatik' },
+  { nummer: '6220', bezeichnung: 'Webseite / Social Media', typ: 'aufwand', kategorie: 'informatik' },
+  { nummer: '6230', bezeichnung: 'Inserate / PR', typ: 'aufwand', kategorie: 'werbung' },
+  { nummer: '6240', bezeichnung: 'Drucksache / Werbematerial etc', typ: 'aufwand', kategorie: 'werbung' },
+  // === Abstimmungen / Wahlen ===
   { nummer: '6401', bezeichnung: 'Kampagnen', typ: 'aufwand', kategorie: 'abstimmungen' },
   { nummer: '6405', bezeichnung: 'Wahlen 2027', typ: 'aufwand', kategorie: 'abstimmungen' },
+  // === Finanzaufwand ===
   { nummer: '7940', bezeichnung: 'Bankspesen', typ: 'aufwand', kategorie: 'finanz' },
   { nummer: '7950', bezeichnung: 'Erträge aus Guthaben', typ: 'ertrag', kategorie: 'finanz' },
-  { nummer: '8001', bezeichnung: 'Fondsbewegung SP AR Sekretariat (Mandatskosten)', typ: 'aufwand', kategorie: 'fonds' },
-  { nummer: '8002', bezeichnung: 'Fondsbewegung SP AR Kantonsratsfraktion', typ: 'aufwand', kategorie: 'fonds' },
-  { nummer: '8005', bezeichnung: 'Fondsbewegung Wahlen 2027', typ: 'aufwand', kategorie: 'fonds' },
+  // === Fonds ===
+  { nummer: '8001', bezeichnung: 'Fondsentnahme/Fondzuwendung SP AR Sekretariat (Mandatskosten)', typ: 'aufwand', kategorie: 'fonds' },
+  { nummer: '8002', bezeichnung: 'Fondsentnahme/Fondzuwendung SP AR Kantonsratsfraktion', typ: 'aufwand', kategorie: 'fonds' },
+  { nummer: '8005', bezeichnung: 'Fondsentnahme/Fondzuwendung Wahlen 2027', typ: 'aufwand', kategorie: 'fonds' },
 ];
+
+// Rückwärts-Kompat: alter Export-Name wird noch von anderen Modulen erwartet.
+export const KONTENPLAN_2026_ERGAENZUNGEN = KONTENPLAN_2026;
 
 // Voranschlag 2026 aus dem Excel-Budget. Wird via api.seedVoranschlag2026()
 // als Budget-Dokument für Jahr 2026 abgelegt. Beträge in CHF, positiv;
@@ -222,40 +271,50 @@ export const KONTENPLAN_2026_ERGAENZUNGEN = [
 export const VORANSCHLAG_2026 = [
   // === Einnahmen ===
   { konto: '3001', betrag: 32160, notiz: 'Sektionsbeiträge' },
-  { konto: '3002', betrag: 9600, notiz: 'Beiträge Mandatsträger:innen' },
-  { konto: '3003', betrag: 0, notiz: 'Diverse Zuwendungen Mitglieder' },
-  { konto: '3200', betrag: 0, notiz: 'Spenden / Vergabungen (allgemein)' },
-  { konto: '3201', betrag: 0, notiz: 'Spenden / Vergabungen (Projekte)' },
-  { konto: '3202', betrag: 27000, notiz: 'Abstimmungen / Wahlen 2027' },
+  { konto: '3002', betrag: 9600, notiz: 'Beiträge Mandatsträger' },
+  { konto: '3003', betrag: 0, notiz: 'div Zuwendungen Mitglieder' },
+  { konto: '3200', betrag: 0, notiz: 'Spenden - Vergabungen (allgemein)' },
+  { konto: '3201', betrag: 0, notiz: 'Spenden - Vergabungen (Projekte)' },
+  { konto: '3202', betrag: 27000, notiz: 'Abstimmungen - Wahlen 2027' },
   { konto: '3210', betrag: 0, notiz: 'Einnahmen Veranstaltungen' },
-  { konto: '3211', betrag: 5000, notiz: 'Beitrag Kanton AR z.G.v. SP-Fraktion' },
-  // === Ausgaben Sekretariat ===
+  { konto: '3211', betrag: 5000, notiz: 'Beitrag Kanton AR zGv SP-Fraktion' },
+  // === Sekretariat Materialkosten ===
   { konto: '4101', betrag: 300, notiz: 'Materialeinkauf' },
   { konto: '4105', betrag: 400, notiz: 'Porto' },
-  { konto: '4106', betrag: 300, notiz: 'Diverse Spesen Sekretariat' },
-  // === Vorstand / Veranstaltungen ===
-  { konto: '4210', betrag: 1100, notiz: 'Vorstand und Präsidium' },
-  { konto: '4211', betrag: 2000, notiz: 'Delegiertenversammlungen' },
-  { konto: '4212', betrag: 1000, notiz: 'Parteitage' },
-  { konto: '4219', betrag: 1000, notiz: 'Sonstige Veranstaltungen' },
-  { konto: '4220', betrag: 1500, notiz: 'Fahrspesen Vorstand' },
-  { konto: '4250', betrag: 16000, notiz: 'Mitgliedschaften – SPS' },
-  { konto: '4251', betrag: 500, notiz: 'Mitgliedschaften – sonstige' },
-  // === Personal ===
+  { konto: '4106', betrag: 300, notiz: 'div. Spesen' },
+  // === Direkte Kosten Vorstand / Veranstaltungen ===
+  { konto: '4210', betrag: 1100, notiz: 'Aufwand Vorstand und Präsidium' },
+  { konto: '4211', betrag: 2000, notiz: 'Aufwand Delegiertenversammlungen' },
+  { konto: '4212', betrag: 1000, notiz: 'Aufwand Parteitage' },
+  { konto: '4219', betrag: 1000, notiz: 'Aufwand sonstige Veranstaltungen' },
+  { konto: '4220', betrag: 1500, notiz: 'Aufwand Fahrspesen Vorstand' },
+  { konto: '4250', betrag: 16000, notiz: 'Mitgliedschaften - Beiträge SPS' },
+  { konto: '4251', betrag: 500, notiz: 'Mitgliedschaften - sonstige' },
+  // === Löhne / Mandate ===
   { konto: '5001', betrag: 6000, notiz: 'Mandat Sekretariat SP AR' },
   { konto: '5002', betrag: 6000, notiz: 'Fraktion: Sekretariat und diverse Aufwände' },
+  { konto: '5003', betrag: 0, notiz: 'Löhne AHV pflichtig' },
+  { konto: '5004', betrag: 0, notiz: 'Löhne nicht AHV pflichtig' },
+  // === Lohnnebenkosten ===
+  { konto: '5101', betrag: 0, notiz: 'AHV IV EO ALV' },
+  { konto: '5102', betrag: 0, notiz: 'BVG' },
+  { konto: '5103', betrag: 0, notiz: 'B-UV' },
+  { konto: '5104', betrag: 0, notiz: 'KTV' },
+  // === Weiterbildung / Personalaufwand ===
   { konto: '5201', betrag: 300, notiz: 'Aus- und Weiterbildung' },
-  // === Übriger Aufwand ===
+  // === Übriger betrieblicher Aufwand ===
   { konto: '6210', betrag: 1000, notiz: 'Informatik (Server, Lizenzen etc.)' },
-  { konto: '6220', betrag: 1000, notiz: 'Website / Social Media' },
-  { konto: '6240', betrag: 1000, notiz: 'Drucksachen / Werbematerial' },
+  { konto: '6220', betrag: 1000, notiz: 'Webseite / Social Media' },
+  { konto: '6230', betrag: 0, notiz: 'Inserate / PR' },
+  { konto: '6240', betrag: 1000, notiz: 'Drucksache / Werbematerial etc' },
+  // === Abstimmungen / Wahlen ===
   { konto: '6401', betrag: 2000, notiz: 'Kampagnen' },
   { konto: '6405', betrag: 10000, notiz: 'Wahlen 2027' },
   // === Finanzaufwand ===
   { konto: '7940', betrag: 100, notiz: 'Bankspesen' },
   { konto: '7950', betrag: -100, notiz: 'Erträge aus Guthaben (negativ = Ertrag)' },
   // === Fonds ===
-  { konto: '8001', betrag: -1000, notiz: 'Fondsbewegung SP AR Sekretariat' },
-  { konto: '8002', betrag: -1000, notiz: 'Fondsbewegung SP AR Kantonsratsfraktion' },
-  { konto: '8005', betrag: 23360, notiz: 'Fondszuwendung Wahlen 2027' },
+  { konto: '8001', betrag: -1000, notiz: 'Fondsentnahme/Fondzuwendung SP AR Sekretariat (Mandatskosten)' },
+  { konto: '8002', betrag: -1000, notiz: 'Fondsentnahme/Fondzuwendung SP AR Kantonsratsfraktion' },
+  { konto: '8005', betrag: 23360, notiz: 'Fondsentnahme/Fondzuwendung Wahlen 2027' },
 ];

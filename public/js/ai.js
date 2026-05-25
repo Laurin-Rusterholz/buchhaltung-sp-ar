@@ -332,7 +332,14 @@ NIE Klartext zurückgeben. NIE die Antwort verweigern. IMMER das JSON-Schema bef
     };
   }
   // Backward-Compat-Feld
-  result.konto_vorschlag = result.konto_soll || result.konto_vorschlag;
+  // Firestore akzeptiert keine `undefined`-Werte → immer auf null normalisieren
+  result.konto_vorschlag = result.konto_soll || result.konto_vorschlag || null;
+  // Vorsorglich auch andere optionale Felder die undefined sein könnten
+  for (const k of ['datum', 'faelligkeit', 'betrag', 'vendor', 'beleg_nr', 'beschreibung',
+                   'konto_soll', 'konto_haben', 'tags', 'begruendung', 'ist_einnahme',
+                   'bezahlt', 'ist_beleg']) {
+    if (result[k] === undefined) result[k] = null;
+  }
   return result;
 }
 

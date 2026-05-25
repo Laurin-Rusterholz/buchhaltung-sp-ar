@@ -96,13 +96,38 @@ async function appendBelegToPdf(targetPdf, belegBytes, mime, headerLine) {
   return { ok: false, reason: `Nicht unterstütztes Format: ${mime || '?'}` };
 }
 
+// pdf-lib's StandardFont (Helvetica) ist WinAnsi-encoded und unterstützt
+// keine Unicode-Sonderzeichen ausserhalb von Latin-1. Wir mappen die
+// gängigsten Zeichen auf ASCII-Ersatz, restliche Glyphen werden auf "?"
+// gesetzt damit drawText() nicht crasht.
+const UNICODE_FALLBACK = {
+  '→': '>', '←': '<', '⇒': '>>', '⇐': '<<', '↔': '<>',
+  '•': '-', '·': '-', '–': '-', '—': '-', '…': '...',
+  '✓': 'OK', '✗': 'X', '★': '*',
+  ' ': ' ', '\t': '    ',
+};
+function sanitizeForPdf(s) {
+  return String(s || '')
+    .replace(/./g, (ch) => {
+      if (UNICODE_FALLBACK[ch] != null) return UNICODE_FALLBACK[ch];
+      const code = ch.charCodeAt(0);
+      // WinAnsi-Bereich: 0x00-0x7F plus erweiterte Latin-1-Glyphen
+      if (code < 0x20 && ch !== '\n') return ' ';
+      if (code <= 0x7E) return ch;            // ASCII
+      if (code >= 0xA0 && code <= 0xFF) return ch; // Latin-1 (ü, ö, ä etc.)
+      // Specials wie € (0x20AC) – pdf-lib mapped die teils selbst, sonst Fallback
+      if (ch === '€') return 'EUR';
+      return '?';
+    });
+}
+
 async function addSeparatorPage(pdf, text) {
   const { StandardFonts, rgb } = window.PDFLib;
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const page = pdf.addPage([595, 842]);
   const margin = 50;
-  const lines = String(text).split('\n');
+  const lines = sanitizeForPdf(text).split('\n');
   let y = 800;
   page.drawRectangle({ x: 0, y: 0, width: 595, height: 842, color: rgb(1, 1, 1) });
   page.drawRectangle({ x: 0, y: 820, width: 595, height: 6, color: rgb(0.78, 0.06, 0.18) });
@@ -191,7 +216,7 @@ export async function generateBuchungsDossier({ jahre, onProgress } = {}) {
         const { bytes, mime } = await fetchBelegBytes(fileInfo.fetchUrl);
         const headerLine = [
           `${b.datum} – ${b.beschreibung || '(ohne Beschreibung)'}`,
-          `Soll ${b.soll} ${kontoMap.get(b.soll)?.bezeichnung || ''}  →  Haben ${b.haben} ${kontoMap.get(b.haben)?.bezeichnung || ''}`,
+          `Soll ${b.soll} ${kontoMap.get(b.soll)?.bezeichnung || ''}  >  Haben ${b.haben} ${kontoMap.get(b.haben)?.bezeichnung || ''}`,
           `CHF ${formatChf(b.betrag)}${b.beleg_nr ? ' · Beleg-Nr ' + b.beleg_nr : ''}`,
         ].join('\n');
 
@@ -206,8 +231,17 @@ export async function generateBuchungsDossier({ jahre, onProgress } = {}) {
           extras++;
         }
       } catch (err) {
-        console.warn(`Beleg-Fetch fehlgeschlagen für Buchung ${b.id}:`, err);
+        console.warn(`Beleg-Verarbeitung fehlgeschlagen für Buchung ${b.id}:`, err);
         failed++;
+        // Versuchen, den Beleg trotzdem als Original-Datei beizulegen wenn
+        // die Bytes schon geladen sind (sonst nichts).
+        try {
+          const { bytes } = await fetchBelegBytes(fileInfo.fetchUrl);
+          const safeBase = safeFilename(`${b.datum}_${b.beleg_nr || ''}_${b.beschreibung || ''}`);
+          const ext = fileInfo.fileName.match(/\.[^.]+$/)?.[0] || '';
+          zip.file(`${key}/extras/${safeBase}${ext}`, bytes);
+          extras++;
+        } catch {}
       }
     }
 

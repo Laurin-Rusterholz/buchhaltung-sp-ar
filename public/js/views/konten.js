@@ -96,11 +96,14 @@ export default {
     container.querySelector('#seed-2026').onclick = async () => {
       try {
         const res = await api.seedKontenplan2026();
-        if (res.added > 0) {
-          toast(`${res.added} fehlende Konten aus Budget 2026 hinzugefügt`, 'success');
-          location.reload();
+        const parts = [];
+        if (res.added) parts.push(`${res.added} neu angelegt`);
+        if (res.updated) parts.push(`${res.updated} aktualisiert (Bezeichnung/Typ)`);
+        if (parts.length === 0) {
+          toast('Alle Konten aus Budget 2026 sind bereits korrekt.', 'info');
         } else {
-          toast('Alle Konten aus Budget 2026 sind bereits vorhanden.', 'info');
+          toast(`Kontenplan 2026 synchronisiert: ${parts.join(', ')}.`, 'success');
+          setTimeout(() => location.reload(), 800);
         }
       } catch (err) {
         toast('Fehlgeschlagen: ' + err.message, 'error');
