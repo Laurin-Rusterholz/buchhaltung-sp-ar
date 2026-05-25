@@ -5,13 +5,15 @@ import { formatChf, formatDate, escapeHtml } from '../utils.js';
 export default {
   async render(container) {
     const jahr = state.aktuellesJahr;
-    const [buchungen, konten, sektionen, rechnungen, er, bilanz] = await Promise.all([
+    const [buchungen, konten, sektionen, rechnungen, er, bilanz, portalBelege, inboxState] = await Promise.all([
       api.listBuchungen(jahr),
       api.listKonten(),
       api.listSektionen(),
       api.listRechnungen(jahr),
       api.erfolgsrechnung(jahr).catch(() => null),
       api.bilanz(jahr).catch(() => null),
+      api.fetchPortalBelege().catch(() => []),
+      api.getInboxState().catch(() => ({})),
     ]);
 
     const kontoMap = new Map(konten.map((k) => [k.nummer, k]));
@@ -25,6 +27,15 @@ export default {
     const offeneRechnungen = rechnungen.filter((r) => r.status === 'offen');
     const offenSum = offeneRechnungen.reduce((s, r) => s + Number(r.total || 0), 0);
 
+    // Inbox: alle Portal-Belege, die noch nicht abgeschlossen sind
+    const offeneInbox = portalBelege.filter((p) => {
+      const local = inboxState[p.id];
+      if (local?.buchungId) return false;
+      return p.status !== 'abgeschlossen';
+    });
+    const inboxNeu = offeneInbox.filter((p) => !inboxState[p.id]?.draft).length;
+    const inboxInArbeit = offeneInbox.length - inboxNeu;
+
     const letzteBuchungen = buchungen.slice().sort((a, b) => b.datum.localeCompare(a.datum)).slice(0, 10);
 
     container.innerHTML = `
@@ -33,29 +44,36 @@ export default {
       </div>
 
       <div class="cards-grid">
-        <div class="kpi">
-          <div class="kpi-label">Liquidität</div>
-          <div class="kpi-value">CHF ${formatChf(liquiditaet)}</div>
+        <div class="kpi kpi--inbox is-link" data-goto="inbox">
+          <div class="kpi-label"><span class="icon">📥</span> Inbox</div>
+          <div class="kpi-value">${offeneInbox.length}</div>
+          <div class="kpi-sub">${inboxNeu} neu · ${inboxInArbeit} in Bearbeitung</div>
         </div>
-        <div class="kpi">
-          <div class="kpi-label">Ertrag</div>
+        <div class="kpi kpi--liquid">
+          <div class="kpi-label"><span class="icon">💰</span> Liquidität</div>
+          <div class="kpi-value">CHF ${formatChf(liquiditaet)}</div>
+          <div class="kpi-sub">${liquideKonten.length} Konten</div>
+        </div>
+        <div class="kpi kpi--ertrag">
+          <div class="kpi-label"><span class="icon">📈</span> Ertrag</div>
           <div class="kpi-value positive">CHF ${formatChf(totalErtrag)}</div>
         </div>
-        <div class="kpi">
-          <div class="kpi-label">Aufwand</div>
+        <div class="kpi kpi--aufwand">
+          <div class="kpi-label"><span class="icon">📉</span> Aufwand</div>
           <div class="kpi-value negative">CHF ${formatChf(totalAufwand)}</div>
         </div>
-        <div class="kpi">
-          <div class="kpi-label">Ergebnis</div>
+        <div class="kpi kpi--ergebnis">
+          <div class="kpi-label"><span class="icon">🎯</span> Ergebnis</div>
           <div class="kpi-value ${ergebnis >= 0 ? 'positive' : 'negative'}">CHF ${formatChf(ergebnis)}</div>
         </div>
-        <div class="kpi">
-          <div class="kpi-label">Sektionen / Mitglieder</div>
+        <div class="kpi is-link" data-goto="sektionen">
+          <div class="kpi-label"><span class="icon">👥</span> Sektionen / Mitglieder</div>
           <div class="kpi-value">${sektionen.filter((s) => (s.status || 'aktiv') === 'aktiv').length} <span class="muted small">/ ${sektionen.filter((s) => (s.status || 'aktiv') === 'aktiv').reduce((sum, s) => sum + Number(s.anzahl_mitglieder || 0), 0)}</span></div>
         </div>
-        <div class="kpi">
-          <div class="kpi-label">Offene Rechnungen</div>
-          <div class="kpi-value">${offeneRechnungen.length} <span class="muted small">CHF ${formatChf(offenSum)}</span></div>
+        <div class="kpi is-link" data-goto="rechnungen">
+          <div class="kpi-label"><span class="icon">🧾</span> Offene Rechnungen</div>
+          <div class="kpi-value">${offeneRechnungen.length}</div>
+          <div class="kpi-sub">CHF ${formatChf(offenSum)}</div>
         </div>
       </div>
 
@@ -120,6 +138,14 @@ export default {
         </div>
       ` : ''}
     `;
+
+    // Klickbare KPI-Kacheln
+    container.querySelectorAll('.kpi.is-link').forEach((el) => {
+      el.addEventListener('click', () => {
+        const route = el.dataset.goto;
+        if (route) location.hash = route;
+      });
+    });
   },
 };
 

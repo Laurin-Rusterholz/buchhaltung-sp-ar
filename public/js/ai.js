@@ -339,3 +339,65 @@ export async function testConnection() {
   const text = await callGemini([{ text: 'Antworte mit dem Wort: OK' }]);
   return text.trim().includes('OK');
 }
+
+// === Chat-Assistent (mehrteilige Konversation) ===
+// Geschichte: Array von { role: 'user'|'assistant', text }
+// Optionaler systemContext: kompakter Snapshot der Buchhaltung als Markdown.
+export async function chat({ history, systemContext, userMessage }) {
+  const key = getApiKey();
+  if (!key) throw new Error('Gemini API Key fehlt – in den Einstellungen hinterlegen.');
+  const model = getModel();
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+
+  const systemInstruction = {
+    parts: [{
+      text: `Du bist der freundliche, präzise Buchhaltungs-Assistent für einen Schweizer Verein (SP AR).
+Du kannst Fragen zur Vereinsbuchhaltung beantworten, Beträge aus den bereitgestellten Daten ablesen,
+Buchungsvorschläge machen und beim Verständnis der doppelten Buchführung helfen.
+
+Antworte knapp, klar und auf Deutsch (Schweizer Konvention: ss statt ß).
+Verwende Markdown für Listen, Fettdruck und Code-Blöcke wenn sinnvoll.
+Wenn du eine Buchung vorschlägst, formatiere sie als: **Soll** Kto-Nr / **Haben** Kto-Nr / CHF Betrag.
+Erfinde keine Konten – nutze nur jene im Kontenplan.
+Wenn dir Informationen fehlen, frag konkret nach.
+
+Aktueller Stand der Buchhaltung:
+${systemContext || '(kein Kontext verfügbar)'}`
+    }],
+  };
+
+  // Gemini contents: alternierende user/model Nachrichten
+  const contents = [];
+  for (const h of history || []) {
+    contents.push({
+      role: h.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: h.text }],
+    });
+  }
+  contents.push({
+    role: 'user',
+    parts: [{ text: userMessage }],
+  });
+
+  const body = {
+    systemInstruction,
+    contents,
+    generationConfig: { temperature: 0.4, maxOutputTokens: 1500 },
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      const err = await res.json();
+      msg = err?.error?.message || msg;
+    } catch {}
+    throw new Error(`Gemini API: ${msg}`);
+  }
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}

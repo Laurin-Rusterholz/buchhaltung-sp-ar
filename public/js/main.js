@@ -5,6 +5,7 @@ import { register, start, renderRoute } from './router.js';
 import { $, currentYear } from './utils.js';
 import { toast } from './components.js';
 import { DEFAULT_EINSTELLUNGEN } from './defaults.js';
+import { initChat } from './chat.js';
 
 import dashboard from './views/dashboard.js';
 import inbox from './views/inbox.js';
@@ -140,4 +141,7 @@ register('berichte', berichte);
 register('geschaeftsjahre', geschaeftsjahre);
 register('einstellungen', einstellungen);
 
-bootstrap().then(() => start());
+bootstrap().then(() => {
+  start();
+  initChat();
+});
