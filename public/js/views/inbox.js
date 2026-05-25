@@ -42,6 +42,7 @@ export default {
         <div class="actions">
           <button id="refresh">↻ Aktualisieren</button>
           <button id="prefetch" class="ai">✨ KI-Vorschläge generieren</button>
+          <button id="upload" class="primary">+ Beleg hochladen</button>
         </div>
       </div>
       <div id="prefetch-banner" class="ai-result hidden"></div>
@@ -191,6 +192,8 @@ export default {
       if (isPrefetchRunning()) { toast('KI läuft schon im Hintergrund…', 'info'); return; }
       startInboxPrefetch();
     };
+
+    container.querySelector('#upload').onclick = () => openUploadForm();
     // Beim Öffnen der Inbox direkt einen Lauf anstossen (falls neue Belege da sind)
     setTimeout(() => startInboxPrefetch(), 300);
 
@@ -204,6 +207,97 @@ export default {
       const row = e.target.closest('[data-open-row]');
       if (row) await openEntry(row.dataset.openRow);
     });
+
+    // Direkt-Upload eines neuen Belegs aus der Buchhaltung. Lädt die Datei
+    // in Firebase Storage und registriert sie im sp-ar-belege Portal,
+    // sodass sie wie ein extern eingereichter Beleg in der Inbox erscheint.
+    function openUploadForm() {
+      const today = todayIso();
+      const m = modal({
+        title: '📥 Beleg direkt hochladen',
+        body: `
+          <p class="muted small">Datei wird in den gemeinsamen Beleg-Pool hochgeladen
+          und erscheint anschliessend in der Inbox. Die KI analysiert den Beleg
+          automatisch im Hintergrund.</p>
+          <div class="form-grid">
+            <div class="input-group full">
+              <label>Datei (PDF, JPG, PNG, …) <span style="color:var(--color-danger)">*</span></label>
+              <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp" />
+            </div>
+            <div class="input-group full">
+              <label>Titel / Beleg-Bezeichnung</label>
+              <input name="title" placeholder="z.B. Druckkosten Flyer (leer = Dateiname)" />
+            </div>
+            <div class="input-group">
+              <label>Einreicher / Notiz</label>
+              <input name="submitter" placeholder="z.B. Kassier direkt" />
+            </div>
+            <div class="input-group">
+              <label>Betrag CHF (optional)</label>
+              <input name="amount" type="number" step="0.05" min="0" placeholder="Optional" />
+            </div>
+            <div class="input-group">
+              <label>Fällig am (optional)</label>
+              <input name="dueDate" type="date" />
+            </div>
+            <div class="input-group">
+              <label class="flex center gap-4" style="cursor:pointer;padding-top:8px">
+                <input name="paid" type="checkbox" style="width:auto" />
+                <span>Bereits bezahlt</span>
+              </label>
+            </div>
+            <div class="input-group full">
+              <label>Kommentar (optional)</label>
+              <textarea name="comment" placeholder="Zusätzliche Hinweise…"></textarea>
+            </div>
+            <div class="input-group full">
+              <div id="upload-progress" class="muted small hidden">
+                Lädt hoch… <span id="upload-pct">0%</span>
+              </div>
+            </div>
+          </div>
+        `,
+        footer: `<button data-cancel>Abbrechen</button><button class="primary" data-save>Hochladen</button>`,
+      });
+      const fileInput = m.bodyEl.querySelector('[name="file"]');
+      const progressEl = m.bodyEl.querySelector('#upload-progress');
+      const pctEl = m.bodyEl.querySelector('#upload-pct');
+      const saveBtn = m.footerEl.querySelector('[data-save]');
+
+      m.footerEl.querySelector('[data-cancel]').onclick = m.close;
+      saveBtn.onclick = async () => {
+        const file = fileInput.files?.[0];
+        if (!file) { toast('Bitte Datei wählen', 'error'); return; }
+        if (file.size > 50 * 1024 * 1024) { toast('Datei zu gross (max. 50 MB)', 'error'); return; }
+        const meta = {
+          title: m.bodyEl.querySelector('[name="title"]').value.trim(),
+          name: m.bodyEl.querySelector('[name="submitter"]').value.trim(),
+          amount: m.bodyEl.querySelector('[name="amount"]').value,
+          dueDate: m.bodyEl.querySelector('[name="dueDate"]').value,
+          paid: m.bodyEl.querySelector('[name="paid"]').checked,
+          comment: m.bodyEl.querySelector('[name="comment"]').value.trim(),
+        };
+        saveBtn.disabled = true;
+        progressEl.classList.remove('hidden');
+        try {
+          const res = await api.uploadBelegToPortal(file, meta, (p) => {
+            pctEl.textContent = `${Math.round(p * 100)}%`;
+          });
+          toast('Beleg hochgeladen – KI analysiert im Hintergrund.', 'success');
+          m.close();
+          // Neu laden, damit der Beleg in der Liste erscheint
+          await loadAll();
+          // Direkt das Verbuchen-Pop-up öffnen – Prefetch startet im
+          // Hintergrund, der KI-Vorschlag erscheint im Pop-up sobald fertig.
+          startInboxPrefetch();
+          setTimeout(() => openEntry(res.id), 300);
+        } catch (err) {
+          toast('Upload fehlgeschlagen: ' + err.message, 'error');
+          saveBtn.disabled = false;
+          progressEl.classList.add('hidden');
+        }
+      };
+    }
 
     async function openEntry(spArId) {
       const portal = portalBelege.find((p) => p.id === spArId);

@@ -107,6 +107,29 @@ export async function deleteJson(key) {
 }
 
 // === Binary Files via Firebase Storage ===
+
+// Upload eines Belegs an genau jenen Pfad, den auch das sp-ar-belege Portal
+// nutzt ('belege/<fileId>_<name>'). Wird für den Direkt-Upload aus der
+// Inbox verwendet, damit der spätere Proxy-Aufruf via beleg-proxy
+// (sp-ar-belege Function) konsistent funktioniert.
+export async function uploadBelegFile(file, onProgress) {
+  const storage = initStorage();
+  const fileId = 'f_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+  const safeName = (file.name || 'beleg').replace(/[^a-zA-Z0-9._-]+/g, '_');
+  const path = 'belege/' + fileId + '_' + safeName;
+  const ref = storage.ref(path);
+  const task = ref.put(file, {
+    contentType: file.type || 'application/octet-stream',
+    customMetadata: { originalName: file.name, uploadedAt: new Date().toISOString() },
+  });
+  if (onProgress) {
+    task.on('state_changed', (snap) => onProgress(snap.bytesTransferred / snap.totalBytes));
+  }
+  await task;
+  const url = await ref.getDownloadURL();
+  return { url, path, fileId, size: file.size };
+}
+
 export async function uploadFile(subpath, file, onProgress) {
   const storage = initStorage();
   const ref = storage.ref(`${NAMESPACE}/files/${subpath}`);

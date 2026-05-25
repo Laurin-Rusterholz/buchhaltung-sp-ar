@@ -1,6 +1,40 @@
 import { api } from '../api.js';
 import { state } from '../main.js';
-import { formatChf, escapeHtml, formatDate } from '../utils.js';
+import { formatChf, escapeHtml, formatDate, downloadFile } from '../utils.js';
+import { modal, toast } from '../components.js';
+import { generateFinanzbericht, hasApiKey } from '../ai.js';
+
+// Sehr leichtgewichtiger Markdown-Renderer (Überschriften, Fett, Italic,
+// Listen, Tabellen, Code). Reicht für die KI-Berichte.
+function renderMarkdown(md) {
+  if (!md) return '';
+  let s = escapeHtml(md);
+  // Code-Blöcke
+  s = s.replace(/```([\s\S]*?)```/g, (_, c) => `<pre>${c}</pre>`);
+  // Inline-Code
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Überschriften
+  s = s.replace(/^######\s+(.+)$/gm, '<h6>$1</h6>');
+  s = s.replace(/^#####\s+(.+)$/gm, '<h5>$1</h5>');
+  s = s.replace(/^####\s+(.+)$/gm, '<h4>$1</h4>');
+  s = s.replace(/^###\s+(.+)$/gm, '<h3>$1</h3>');
+  s = s.replace(/^##\s+(.+)$/gm, '<h2>$1</h2>');
+  s = s.replace(/^#\s+(.+)$/gm, '<h1>$1</h1>');
+  // Bold, Italic
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+  // Listen
+  s = s.replace(/(^|\n)(\s*[-*]\s+.+(?:\n\s*[-*]\s+.+)*)/g, (m, p1, list) => {
+    const items = list.split('\n').filter(Boolean).map((l) => l.replace(/^\s*[-*]\s+/, '<li>') + '</li>').join('');
+    return `${p1}<ul>${items}</ul>`;
+  });
+  // Doppelte Newlines → Absätze
+  s = s.split(/\n{2,}/).map((para) => {
+    if (/^<(h\d|ul|ol|pre|table)/.test(para.trim())) return para;
+    return `<p>${para.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n');
+  return s;
+}
 
 export default {
   async render(container) {
@@ -15,6 +49,7 @@ export default {
             <option value="konto">Kontoauszug</option>
           </select>
           <select id="konto-select" class="hidden"></select>
+          <button id="ai-bericht" class="ai" ${hasApiKey() ? '' : 'disabled title="Claude Key in Einstellungen hinterlegen"'}>✨ AI-Finanzbericht</button>
           <button id="print" class="primary">Drucken / PDF</button>
         </div>
       </div>
@@ -54,6 +89,92 @@ export default {
     sel.onchange = draw;
     kontoSelect.onchange = draw;
     draw();
+
+    // === AI-Finanzbericht ===
+    container.querySelector('#ai-bericht').onclick = () => openAiBericht();
+
+    function openAiBericht() {
+      const m = modal({
+        title: '✨ AI-Finanzbericht generieren',
+        body: `
+          <p class="muted small">
+            Claude vergleicht das Budget mit den tatsächlichen Buchungen und
+            schreibt einen Bericht in Markdown. Konkrete Belegnummern oder
+            Vendor-Namen werden bewusst NICHT zitiert – die Ursachen werden
+            thematisch zusammengefasst.
+          </p>
+          <div class="form-grid">
+            <div class="input-group">
+              <label>Bericht-Typ</label>
+              <select id="bericht-typ">
+                <option value="budget" selected>Budget vs. Ist (detailliert)</option>
+                <option value="jahresrueckblick">Jahresrückblick (erzählerisch)</option>
+                <option value="kompakt">Executive Summary (kompakt)</option>
+              </select>
+            </div>
+          </div>
+          <div id="bericht-status" class="muted small mt-2"></div>
+          <div id="bericht-output" class="ai-result hidden mt-4" style="max-height:55vh;overflow-y:auto"></div>
+        `,
+        footer: `
+          <button data-cancel>Schliessen</button>
+          <button id="bericht-copy" class="hidden">Markdown kopieren</button>
+          <button id="bericht-download" class="hidden">Als .md herunterladen</button>
+          <button class="primary" id="bericht-go">✨ Generieren</button>
+        `,
+      });
+      const typSel = m.bodyEl.querySelector('#bericht-typ');
+      const statusEl = m.bodyEl.querySelector('#bericht-status');
+      const outputEl = m.bodyEl.querySelector('#bericht-output');
+      const goBtn = m.footerEl.querySelector('#bericht-go');
+      const copyBtn = m.footerEl.querySelector('#bericht-copy');
+      const downloadBtn = m.footerEl.querySelector('#bericht-download');
+      m.footerEl.querySelector('[data-cancel]').onclick = m.close;
+      let lastMarkdown = '';
+
+      goBtn.onclick = async () => {
+        goBtn.disabled = true;
+        copyBtn.classList.add('hidden');
+        downloadBtn.classList.add('hidden');
+        outputEl.classList.add('hidden');
+        statusEl.textContent = 'Lade Daten (Buchungen, Konten, Budget)…';
+        try {
+          const [buchungen, konten, budget, einstellungen] = await Promise.all([
+            api.listBuchungen(jahr),
+            api.listKonten(),
+            api.getBudget(jahr),
+            api.getEinstellungen(),
+          ]);
+          if (!buchungen.length) {
+            statusEl.innerHTML = '<span style="color:var(--color-danger)">Keine Buchungen in diesem Jahr – kein Bericht möglich.</span>';
+            goBtn.disabled = false;
+            return;
+          }
+          statusEl.textContent = `Claude analysiert ${buchungen.length} Buchungen und vergleicht mit Budget (${budget?.positionen?.length || 0} Positionen)…`;
+          const md = await generateFinanzbericht({
+            jahr, buchungen, konten, budget, einstellungen, type: typSel.value,
+          });
+          lastMarkdown = md;
+          outputEl.innerHTML = renderMarkdown(md);
+          outputEl.classList.remove('hidden');
+          statusEl.textContent = '✓ Bericht erstellt.';
+          copyBtn.classList.remove('hidden');
+          downloadBtn.classList.remove('hidden');
+        } catch (err) {
+          statusEl.innerHTML = `<span style="color:var(--color-danger)">Fehler: ${escapeHtml(err.message)}</span>`;
+        }
+        goBtn.disabled = false;
+      };
+
+      copyBtn.onclick = async () => {
+        try { await navigator.clipboard.writeText(lastMarkdown); toast('Markdown in die Zwischenablage kopiert', 'success'); }
+        catch { toast('Kopieren fehlgeschlagen', 'error'); }
+      };
+      downloadBtn.onclick = () => {
+        const name = `Finanzbericht-${jahr}-${typSel.value}.md`;
+        downloadFile(name, lastMarkdown, 'text/markdown');
+      };
+    }
   },
 };
 

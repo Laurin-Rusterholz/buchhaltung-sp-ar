@@ -385,6 +385,119 @@ export async function testConnection() {
   return text.trim().includes('OK');
 }
 
+// === KI-Finanzbericht ===
+// Vergleicht Budget vs. Ist und generiert einen Bericht in Markdown.
+// erklärt Abweichungen anhand der Buchungsbeschreibungen (thematisch,
+// OHNE konkrete Rechnungsnummern oder Vendor-Namen zu nennen).
+//
+// type: 'budget' (Soll/Ist), 'jahresrueckblick' (Erzählung), 'kompakt' (kurz).
+export async function generateFinanzbericht({
+  jahr, buchungen, konten, budget, einstellungen, type = 'budget',
+}) {
+  const kontoMap = new Map((konten || []).map((k) => [k.nummer, k]));
+  // Ist-Werte pro Konto berechnen
+  const istPerKonto = new Map();
+  for (const b of buchungen || []) {
+    const betrag = Number(b.betrag) || 0;
+    if (b.soll) istPerKonto.set(b.soll, (istPerKonto.get(b.soll) || 0) + betrag);
+    if (b.haben) istPerKonto.set(b.haben, (istPerKonto.get(b.haben) || 0) - betrag);
+  }
+  // Saldo eines Erfolgs-Kontos: Ertrag = -saldo (negativ aus haben),
+  // Aufwand = +saldo (positiv aus soll). Wir wollen positive Werte.
+  function istBetrag(konto) {
+    const k = kontoMap.get(konto);
+    const raw = istPerKonto.get(konto) || 0;
+    if (!k) return raw;
+    if (k.typ === 'ertrag') return -raw;        // Ertrag: positiv = "haben-Saldo"
+    if (k.typ === 'aufwand') return raw;        // Aufwand: positiv = "soll-Saldo"
+    return raw;
+  }
+
+  // Budget-vs-Ist Tabelle (nur Konten mit Budget oder mit Ist-Werten > 0)
+  const budgetMap = new Map((budget?.positionen || []).map((p) => [String(p.konto), p]));
+  const allKontoNrs = new Set([
+    ...budgetMap.keys(),
+    ...Array.from(istPerKonto.keys()).filter((nr) => {
+      const k = kontoMap.get(nr);
+      return k && (k.typ === 'ertrag' || k.typ === 'aufwand');
+    }),
+  ]);
+  const rows = [];
+  for (const nr of allKontoNrs) {
+    const k = kontoMap.get(nr);
+    if (!k) continue;
+    if (k.typ !== 'ertrag' && k.typ !== 'aufwand') continue;
+    const budgetPos = budgetMap.get(nr);
+    const budget = budgetPos ? Number(budgetPos.betrag) : 0;
+    const ist = istBetrag(nr);
+    const abw = ist - budget;
+    rows.push({ nr, name: k.bezeichnung, typ: k.typ, budget, ist, abw, notiz: budgetPos?.notiz || '' });
+  }
+  rows.sort((a, b) => a.nr.localeCompare(b.nr));
+
+  const tabelle = rows.map((r) =>
+    `- ${r.nr} ${r.name} [${r.typ}] | Budget: CHF ${r.budget.toFixed(2)} | Ist: CHF ${r.ist.toFixed(2)} | Abweichung: CHF ${r.abw >= 0 ? '+' : ''}${r.abw.toFixed(2)}${r.notiz ? ` | Budget-Notiz: ${r.notiz}` : ''}`
+  ).join('\n');
+
+  // Buchungs-Stichworte (nur Beschreibung + Konto + Datum, KEINE Belegnummern)
+  const stichworte = (buchungen || [])
+    .slice()
+    .sort((a, b) => (b.datum || '').localeCompare(a.datum || ''))
+    .map((b) => {
+      const sollK = kontoMap.get(b.soll);
+      const habenK = kontoMap.get(b.haben);
+      return `- ${b.datum} | "${b.beschreibung || ''}" | ${b.soll} ${sollK?.bezeichnung || ''} → ${b.haben} ${habenK?.bezeichnung || ''} | CHF ${Number(b.betrag).toFixed(2)}`;
+    })
+    .slice(0, 200)  // Max 200 für Token-Budget
+    .join('\n');
+
+  // Aggregat Ertrag / Aufwand / Ergebnis
+  const totalErtrag = rows.filter((r) => r.typ === 'ertrag').reduce((s, r) => s + r.ist, 0);
+  const totalAufwand = rows.filter((r) => r.typ === 'aufwand').reduce((s, r) => s + r.ist, 0);
+  const ergebnis = totalErtrag - totalAufwand;
+  const budgetErtrag = rows.filter((r) => r.typ === 'ertrag').reduce((s, r) => s + r.budget, 0);
+  const budgetAufwand = rows.filter((r) => r.typ === 'aufwand').reduce((s, r) => s + r.budget, 0);
+  const budgetErgebnis = budgetErtrag - budgetAufwand;
+
+  const vereinName = einstellungen?.name || 'der Verein';
+
+  const typLabel = {
+    budget: 'einen prägnanten Budget-vs-Ist-Bericht',
+    jahresrueckblick: 'einen erzählerischen Jahresrückblick (3-4 Absätze)',
+    kompakt: 'eine sehr kurze Executive Summary (max. 8 Sätze)',
+  }[type] || 'einen Budget-vs-Ist-Bericht';
+
+  const prompt = `Du bist Buchhalter:in von ${vereinName}. Erstelle ${typLabel} für das Geschäftsjahr ${jahr}.
+
+## Aggregat
+- Ertrag Ist: CHF ${totalErtrag.toFixed(2)} (Budget: CHF ${budgetErtrag.toFixed(2)})
+- Aufwand Ist: CHF ${totalAufwand.toFixed(2)} (Budget: CHF ${budgetAufwand.toFixed(2)})
+- Ergebnis Ist: CHF ${ergebnis.toFixed(2)} (Budget: CHF ${budgetErgebnis.toFixed(2)})
+
+## Konten Budget vs. Ist
+${tabelle || '(keine Daten)'}
+
+## Buchungs-Stichworte (für inhaltliche Erklärungen, NICHT zitieren)
+${stichworte || '(keine Buchungen)'}
+
+Schreibe den Bericht in Markdown mit folgender Struktur (passe Tiefe an gewählten Typ an):
+
+1. **Kennzahlen** – die wichtigsten Zahlen (Ertrag, Aufwand, Ergebnis) und ob das Budget erreicht wurde
+2. **Wo wurde das Budget erreicht / über- / unterschritten** – Top 3-5 Abweichungen mit Erklärung anhand der Buchungs-Stichworte
+3. **Ursachen** – thematisch zusammenfassen ("höhere Veranstaltungskosten aufgrund mehrerer Anlässe", "Wahlkampfvorbereitung treibt Position X")
+4. **Fazit** – ein kurzes Schlusswort
+
+WICHTIG:
+- NIEMALS einzelne Beleg- oder Rechnungsnummern zitieren
+- NIEMALS Vendor-Namen oder Firmen-Namen direkt aus den Beschreibungen zitieren (z.B. nicht "Druckerei XY", sondern "Druckkosten für Werbematerial")
+- Fasse thematisch zusammen, nenne Konten-Bezeichnungen statt einzelne Einträge
+- Auf Deutsch, Schweizer Schreibweise (ss statt ß)
+- Beträge in CHF, formatiert mit Tausendertrennzeichen
+- Beginne den Bericht direkt mit dem Inhalt (keine Einleitung "Hier ist der Bericht…")`;
+
+  return await callClaude([{ text: prompt }], { temperature: 0.4, maxTokens: 3500 });
+}
+
 // === Chat-Assistent (mehrteilige Konversation) mit Prompt-Caching ===
 // history: Array von { role: 'user'|'assistant', text }
 // systemContext: kompakter Snapshot der Buchhaltung – wird als separater

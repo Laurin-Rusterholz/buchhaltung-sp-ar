@@ -1,7 +1,7 @@
 // API-Layer: Sprachliche Klammer um Firebase Storage.
 // Stellt die gleiche Schnittstelle bereit, die alle Views verwenden.
 
-import { readJson, writeJson, uploadFile, deleteFile } from './firebase.js';
+import { readJson, writeJson, uploadFile, deleteFile, uploadBelegFile } from './firebase.js';
 import { DEFAULT_EINSTELLUNGEN, DEFAULT_KONTENPLAN, DEFAULT_VORLAGEN, BELEG_PORTAL_URL, KONTENPLAN_2026_ERGAENZUNGEN, VORANSCHLAG_2026 } from './defaults.js';
 import { bilanz, erfolgsrechnung, kontoauszug } from './accounting.js';
 
@@ -625,6 +625,46 @@ export const api = {
   // und mit CORS:* an buchhaltung-sp-ar zurückliefert).
   belegProxyUrl: (spArId) =>
     `${BELEG_PORTAL_URL}/.netlify/functions/beleg-proxy?id=${encodeURIComponent(spArId)}`,
+
+  // Direkt-Upload eines Belegs aus der buchhaltung-Inbox. Lädt die Datei
+  // in den gleichen Firebase Storage Pfad wie das sp-ar-belege Portal
+  // ('belege/...') und registriert die Metadaten via beleg-submit. Damit
+  // taucht der Beleg in der Inbox auf wie ein extern eingereichter Beleg
+  // und durchläuft denselben Verbuchungs-Workflow.
+  uploadBelegToPortal: async (file, meta = {}, onProgress) => {
+    if (!file) throw new Error('Keine Datei ausgewählt');
+    const up = await uploadBelegFile(file, onProgress);
+    const fileBaseName = (file.name || '').replace(/\.[^.]+$/, '').trim();
+    const payload = {
+      name: (meta.name || '').trim() || 'Buchhaltung (direkt)',
+      title: (meta.title || '').trim() || fileBaseName || `Beleg vom ${new Date().toLocaleDateString('de-CH')}`,
+      amount: Number(meta.amount) > 0 ? Number(meta.amount) : 0,
+      dueDate: meta.dueDate || null,
+      paid: meta.paid === true,
+      comment: (meta.comment || '').trim(),
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: up.size,
+      hasFile: true,
+      firebaseUrl: up.url,
+      firebasePath: up.path,
+      firebaseFileId: up.fileId,
+      submittedAt: new Date().toISOString(),
+      userProvidedFields: {
+        name: !!meta.name, title: !!meta.title,
+        amount: !!(meta.amount && Number(meta.amount) > 0),
+        dueDate: !!meta.dueDate, comment: !!meta.comment,
+      },
+    };
+    const r = await fetch(`${BELEG_PORTAL_URL}/.netlify/functions/beleg-submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || `Portal-Submit fehlgeschlagen (${r.status})`);
+    return { id: data.id, firebaseUrl: up.url, firebasePath: up.path };
+  },
   // Markiert einen Beleg im Portal (Status / Buchungs-Referenz).
   markPortalBeleg: async (spArId, payload) => {
     const url = `${BELEG_PORTAL_URL}/.netlify/functions/beleg-list?action=mark`;
