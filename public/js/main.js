@@ -7,6 +7,7 @@ import { toast } from './components.js';
 import { DEFAULT_EINSTELLUNGEN } from './defaults.js';
 
 import dashboard from './views/dashboard.js';
+import inbox from './views/inbox.js';
 import buchungen from './views/buchungen.js';
 import konten from './views/konten.js';
 import sektionen from './views/sektionen.js';
@@ -92,6 +93,19 @@ async function bootstrap() {
     else if (jahre.length) state.aktuellesJahr = jahre[jahre.length - 1].jahr;
 
     renderJahrSelect();
+
+    // Im Hintergrund: erst nicht-synchronisierte Rechnungen ans Portal
+    // nachsenden, dann den Status-Sync (bezahlt-Rückmeldungen aus Quantus
+    // → Zahlungsbuchungen werden automatisch erstellt).
+    api.retrySyncRechnungen()
+      .catch((err) => console.warn('Rechnungs-Retry fehlgeschlagen:', err))
+      .finally(() => {
+        api.syncRechnungenFromPortal().then((res) => {
+          if (res?.processed > 0) {
+            toast(`${res.processed} Zahlungseingang/-eingänge automatisch verbucht`, 'success');
+          }
+        }).catch((err) => console.warn('Rechnungs-Sync fehlgeschlagen:', err));
+      });
   } catch (err) {
     console.error(err);
     if (err?.code === 'firestore/disabled') {
@@ -114,6 +128,7 @@ export async function reloadJahre() {
 
 // Routen registrieren
 register('dashboard', dashboard);
+register('inbox', inbox);
 register('buchungen', buchungen);
 register('konten', konten);
 register('sektionen', sektionen);

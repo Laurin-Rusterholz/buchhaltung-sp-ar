@@ -1,6 +1,6 @@
-// Einfacher Hash-Router
+// Einfacher Hash-Router mit Query-Parameter-Support
 
-import { $, $$ } from './utils.js';
+import { $, $$, parseHash } from './utils.js';
 
 const routes = {};
 
@@ -9,11 +9,11 @@ export function register(name, view) {
 }
 
 function currentRoute() {
-  return (location.hash.replace(/^#/, '') || 'dashboard').split('?')[0];
+  return parseHash().route;
 }
 
 export async function renderRoute() {
-  const route = currentRoute();
+  const { route, params } = parseHash();
   const view = routes[route];
   const container = $('#view');
 
@@ -27,7 +27,7 @@ export async function renderRoute() {
   }
   container.innerHTML = '<div class="loader">Lädt…</div>';
   try {
-    await view.render(container);
+    await view.render(container, params);
   } catch (err) {
     console.error(err);
     container.innerHTML = `<div class="empty">Fehler beim Laden: ${err.message}</div>`;

@@ -91,3 +91,17 @@ export function debounce(fn, ms = 250) {
     t = setTimeout(() => fn(...args), ms);
   };
 }
+
+// Hash-URL parsen: "#route?key=value&other=x" → { route, params }
+export function parseHash(hash = location.hash) {
+  const raw = (hash || '').replace(/^#/, '');
+  const [route, qs] = raw.split('?');
+  const params = {};
+  if (qs) {
+    for (const pair of qs.split('&')) {
+      const [k, v] = pair.split('=');
+      if (k) params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+    }
+  }
+  return { route: route || 'dashboard', params };
+}
