@@ -2,12 +2,7 @@ import { api } from '../api.js';
 import { state } from '../main.js';
 import { escapeHtml } from '../utils.js';
 import { toast } from '../components.js';
-import {
-  getApiKey, setApiKey, getModel, setModel,
-  getClaudeApiKey, setClaudeApiKey, getClaudeModel, setClaudeModel,
-  getProvider, setProvider,
-  hasApiKey, testConnection,
-} from '../ai.js';
+import { getApiKey, setApiKey, getModel, setModel, hasApiKey, testConnection } from '../ai.js';
 
 export default {
   async render(container) {
@@ -83,90 +78,38 @@ service firebase.storage {
       </div>
 
       <div class="card">
-        <h3>✨ KI-Funktionen</h3>
+        <h3>✨ KI-Funktionen (Anthropic Claude)</h3>
         <p class="muted small">
-          API-Keys werden ausschliesslich lokal im Browser (LocalStorage) gespeichert.
-          Du kannst zwischen Google Gemini und Anthropic Claude wechseln – alle
-          KI-Funktionen (Buchungs-, Beleg- und Voranschlags-Vorschläge, Chat)
-          nutzen den aktiven Provider.
-        </p>
-        <div class="form-grid">
-          <div class="input-group full">
-            <label>Aktiver KI-Provider</label>
-            <select id="ai-provider">
-              <option value="gemini" ${getProvider() === 'gemini' ? 'selected' : ''}>Google Gemini</option>
-              <option value="claude" ${getProvider() === 'claude' ? 'selected' : ''}>Anthropic Claude (Sonnet 4.6)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div class="card" id="gemini-card">
-        <h3>🟦 Google Gemini</h3>
-        <p class="muted small">
-          Key erstellen:
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com/app/apikey</a>
-        </p>
-        <div class="form-grid">
-          <div class="input-group full">
-            <label>Gemini API Key</label>
-            <input id="gemini-key" type="password" value="${escapeHtml(getApiKey())}" placeholder="AIza..." />
-          </div>
-          <div class="input-group">
-            <label>Modell</label>
-            <select id="gemini-model">
-              <option value="gemini-1.5-flash" ${getModel() === 'gemini-1.5-flash' ? 'selected' : ''}>gemini-1.5-flash (schnell)</option>
-              <option value="gemini-1.5-pro" ${getModel() === 'gemini-1.5-pro' ? 'selected' : ''}>gemini-1.5-pro (genauer)</option>
-              <option value="gemini-2.0-flash-exp" ${getModel() === 'gemini-2.0-flash-exp' ? 'selected' : ''}>gemini-2.0-flash-exp</option>
-            </select>
-          </div>
-          <div class="input-group">
-            <label>Status</label>
-            <div id="gemini-status" class="${getApiKey() ? 'badge success' : 'badge muted'}">
-              ${getApiKey() ? 'Key gesetzt' : 'Kein Key'}
-            </div>
-          </div>
-        </div>
-        <div class="flex mt-2">
-          <button class="primary" id="save-gemini">Gemini speichern</button>
-          <button id="test-gemini" ${getApiKey() ? '' : 'disabled'}>Verbindung testen</button>
-          <button class="danger" id="remove-gemini" ${getApiKey() ? '' : 'disabled'}>Entfernen</button>
-        </div>
-      </div>
-
-      <div class="card" id="claude-card">
-        <h3>🟪 Anthropic Claude</h3>
-        <p class="muted small">
-          Key erstellen:
-          <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a>
-          · Vorgewählt: Sonnet 4.6 (beste Balance aus Geschwindigkeit, Intelligenz und Kosten).
-          Snapshots der Buchhaltung werden in der Chat-Funktion via Prompt-Caching
-          wiederverwendet (Folgefragen ~90% billiger).
+          API-Key wird ausschliesslich lokal im Browser (LocalStorage) gespeichert – nicht
+          in Firebase. Alle KI-Funktionen (Buchungs-, Beleg- und Voranschlags-Vorschläge,
+          Chat-Assistent) laufen über die Claude API. Key erstellen:
+          <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a>.
+          Im Chat-Assistenten nutzen Folgefragen Prompt-Caching (~90% billiger).
         </p>
         <div class="form-grid">
           <div class="input-group full">
             <label>Claude API Key</label>
-            <input id="claude-key" type="password" value="${escapeHtml(getClaudeApiKey())}" placeholder="sk-ant-api03-..." />
+            <input id="claude-key" type="password" value="${escapeHtml(getApiKey())}" placeholder="sk-ant-api03-..." />
           </div>
           <div class="input-group">
             <label>Modell</label>
             <select id="claude-model">
-              <option value="claude-sonnet-4-6" ${getClaudeModel() === 'claude-sonnet-4-6' ? 'selected' : ''}>claude-sonnet-4-6 (empfohlen)</option>
-              <option value="claude-opus-4-7" ${getClaudeModel() === 'claude-opus-4-7' ? 'selected' : ''}>claude-opus-4-7 (intelligenter, teurer)</option>
-              <option value="claude-haiku-4-5" ${getClaudeModel() === 'claude-haiku-4-5' ? 'selected' : ''}>claude-haiku-4-5 (am schnellsten/billigsten)</option>
+              <option value="claude-sonnet-4-6" ${getModel() === 'claude-sonnet-4-6' ? 'selected' : ''}>Sonnet 4.6 (empfohlen)</option>
+              <option value="claude-opus-4-7" ${getModel() === 'claude-opus-4-7' ? 'selected' : ''}>Opus 4.7 (intelligenter, teurer)</option>
+              <option value="claude-haiku-4-5" ${getModel() === 'claude-haiku-4-5' ? 'selected' : ''}>Haiku 4.5 (am schnellsten / günstigsten)</option>
             </select>
           </div>
           <div class="input-group">
             <label>Status</label>
-            <div id="claude-status" class="${getClaudeApiKey() ? 'badge success' : 'badge muted'}">
-              ${getClaudeApiKey() ? 'Key gesetzt' : 'Kein Key'}
+            <div id="claude-status" class="${hasApiKey() ? 'badge success' : 'badge muted'}">
+              ${hasApiKey() ? 'Key gesetzt' : 'Kein Key'}
             </div>
           </div>
         </div>
         <div class="flex mt-2">
-          <button class="primary" id="save-claude">Claude speichern</button>
-          <button id="test-claude" ${getClaudeApiKey() ? '' : 'disabled'}>Verbindung testen</button>
-          <button class="danger" id="remove-claude" ${getClaudeApiKey() ? '' : 'disabled'}>Entfernen</button>
+          <button class="primary" id="save-claude">Speichern</button>
+          <button id="test-claude" ${hasApiKey() ? '' : 'disabled'}>Verbindung testen</button>
+          <button class="danger" id="remove-claude" ${hasApiKey() ? '' : 'disabled'}>Entfernen</button>
         </div>
       </div>
 
@@ -229,40 +172,30 @@ service firebase.storage {
       } catch (err) { toast(err.message, 'error'); }
     };
 
-    // Provider-Auswahl
-    const providerSel = container.querySelector('#ai-provider');
-    providerSel.onchange = () => {
-      setProvider(providerSel.value);
-      toast(`Aktiver Provider: ${providerSel.value === 'claude' ? 'Anthropic Claude' : 'Google Gemini'}`, 'success');
-    };
+    // Claude API Key
+    const keyInput = container.querySelector('#claude-key');
+    const modelSel = container.querySelector('#claude-model');
+    const statusEl = container.querySelector('#claude-status');
+    const testBtn = container.querySelector('#test-claude');
+    const removeBtn = container.querySelector('#remove-claude');
 
-    // Gemini API Key
-    const keyInput = container.querySelector('#gemini-key');
-    const modelSel = container.querySelector('#gemini-model');
-    const statusEl = container.querySelector('#gemini-status');
-    const testBtn = container.querySelector('#test-gemini');
-    const removeBtn = container.querySelector('#remove-gemini');
-
-    container.querySelector('#save-gemini').onclick = () => {
+    container.querySelector('#save-claude').onclick = () => {
       setApiKey(keyInput.value);
       setModel(modelSel.value);
-      const has = !!getApiKey();
+      const has = hasApiKey();
       statusEl.className = `badge ${has ? 'success' : 'muted'}`;
       statusEl.textContent = has ? 'Key gesetzt' : 'Kein Key';
       testBtn.disabled = !has;
       removeBtn.disabled = !has;
-      toast('Gemini-Einstellungen gespeichert', 'success');
+      toast('Claude-Einstellungen gespeichert', 'success');
     };
 
     testBtn.onclick = async () => {
-      const prev = getProvider();
-      setProvider('gemini');
       testBtn.disabled = true;
       try {
         const ok = await testConnection();
-        toast(ok ? 'Gemini-Verbindung OK' : 'Verbindung steht, aber unerwartete Antwort', ok ? 'success' : 'error');
+        toast(ok ? 'Claude-Verbindung OK' : 'Verbindung steht, aber unerwartete Antwort', ok ? 'success' : 'error');
       } catch (err) { toast(err.message, 'error'); }
-      setProvider(prev);
       testBtn.disabled = false;
     };
 
@@ -273,47 +206,6 @@ service firebase.storage {
       statusEl.textContent = 'Kein Key';
       testBtn.disabled = true;
       removeBtn.disabled = true;
-      toast('Gemini Key entfernt', 'success');
-    };
-
-    // Claude API Key
-    const claudeKeyInput = container.querySelector('#claude-key');
-    const claudeModelSel = container.querySelector('#claude-model');
-    const claudeStatusEl = container.querySelector('#claude-status');
-    const claudeTestBtn = container.querySelector('#test-claude');
-    const claudeRemoveBtn = container.querySelector('#remove-claude');
-
-    container.querySelector('#save-claude').onclick = () => {
-      setClaudeApiKey(claudeKeyInput.value);
-      setClaudeModel(claudeModelSel.value);
-      const has = !!getClaudeApiKey();
-      claudeStatusEl.className = `badge ${has ? 'success' : 'muted'}`;
-      claudeStatusEl.textContent = has ? 'Key gesetzt' : 'Kein Key';
-      claudeTestBtn.disabled = !has;
-      claudeRemoveBtn.disabled = !has;
-      toast('Claude-Einstellungen gespeichert', 'success');
-    };
-
-    claudeTestBtn.onclick = async () => {
-      // Test temporär auf Claude umschalten, danach Provider zurücksetzen.
-      const prev = getProvider();
-      setProvider('claude');
-      claudeTestBtn.disabled = true;
-      try {
-        const ok = await testConnection();
-        toast(ok ? 'Claude-Verbindung OK' : 'Verbindung steht, aber unerwartete Antwort', ok ? 'success' : 'error');
-      } catch (err) { toast(err.message, 'error'); }
-      setProvider(prev);
-      claudeTestBtn.disabled = false;
-    };
-
-    claudeRemoveBtn.onclick = () => {
-      setClaudeApiKey('');
-      claudeKeyInput.value = '';
-      claudeStatusEl.className = 'badge muted';
-      claudeStatusEl.textContent = 'Kein Key';
-      claudeTestBtn.disabled = true;
-      claudeRemoveBtn.disabled = true;
       toast('Claude Key entfernt', 'success');
     };
 

@@ -213,7 +213,7 @@ export default {
           <div class="ai-result mb-4" id="ai-info" style="display:${hasApiKey() ? 'block' : 'none'}">
             <span id="ai-status">${aiResult ? 'KI-Analyse aus Cache geladen.' : 'KI analysiert Beleg…'}</span>
           </div>
-          ${!hasApiKey() ? '<div class="ai-hint muted small mb-4">Hinweis: Kein Gemini API-Key in den Einstellungen → KI-Vorschläge sind deaktiviert.</div>' : ''}
+          ${!hasApiKey() ? '<div class="ai-hint muted small mb-4">Hinweis: Kein Claude API-Key in den Einstellungen → KI-Vorschläge sind deaktiviert.</div>' : ''}
 
           <div class="card" style="background:var(--color-bg);margin-bottom:16px">
             <div class="flex between center" style="margin-bottom:6px">

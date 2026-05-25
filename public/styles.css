@@ -555,7 +555,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shado
   font-weight: 700;
 }
 
-/* ============ AI / Gemini ============ */
+/* ============ AI / Claude ============ */
 .btn.ai, button.ai {
   background: var(--gradient-ai);
   color: white;

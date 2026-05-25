@@ -80,7 +80,7 @@ export default {
           <div class="actions">
             <label class="muted small" style="display:flex;align-items:center;gap:6px">Jahr <select id="budget-jahr">${jahrOptions.join('')}</select></label>
             <span id="save-indicator" class="badge muted">Bereit</span>
-            <button class="ai" id="ai-generate" ${hasApiKey() ? '' : 'disabled title="Gemini Key in Einstellungen hinterlegen"'}>✨ AI-Voranschlag</button>
+            <button class="ai" id="ai-generate" ${hasApiKey() ? '' : 'disabled title="Claude Key in Einstellungen hinterlegen"'}>✨ AI-Voranschlag</button>
             <button class="primary" id="save-budget">Manuell speichern</button>
           </div>
         </div>
@@ -250,14 +250,14 @@ export default {
 
     function openAi() {
       if (!hasApiKey()) {
-        toast('Gemini API Key fehlt – in Einstellungen hinterlegen', 'error');
+        toast('Claude API Key fehlt – in Einstellungen hinterlegen', 'error');
         return;
       }
       const m = modal({
         title: `✨ Voranschlag ${budgetJahr} generieren`,
         body: `
           <p class="muted small">
-            Gemini erstellt einen Voranschlag basierend auf den Ist-Werten der
+            Claude erstellt einen Voranschlag basierend auf den Ist-Werten der
             Vorjahre und den aktuell erfassten Sektionen.
             Anschliessend kannst du jede Position anpassen.
           </p>
@@ -283,7 +283,7 @@ export default {
       goBtn.onclick = async () => {
         goBtn.disabled = true;
         output.classList.remove('hidden');
-        output.innerHTML = '<div class="loader">Gemini erstellt Voranschlag (kann etwas dauern)…</div>';
+        output.innerHTML = '<div class="loader">Claude erstellt Voranschlag (kann etwas dauern)…</div>';
         try {
           const sektionen = await api.listSektionen();
           const notiz = m.bodyEl.querySelector('#ai-notiz').value.trim();

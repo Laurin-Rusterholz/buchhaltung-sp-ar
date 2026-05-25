@@ -194,14 +194,14 @@ export default {
 
     function openAi() {
       if (!hasApiKey()) {
-        toast('Gemini API Key fehlt – in Einstellungen hinterlegen', 'error');
+        toast('Claude API Key fehlt – in Einstellungen hinterlegen', 'error');
         location.hash = 'einstellungen';
         return;
       }
       const m = modal({
         title: '✨ AI-Kontenplan generieren',
         body: `
-          <p class="muted small">Beschreibe den Verein. Gemini schlägt einen
+          <p class="muted small">Beschreibe den Verein. Claude schlägt einen
           angepassten Schweizer Kontenplan vor.</p>
           <div class="input-group full">
             <label>Vereins-Beschreibung</label>
@@ -229,7 +229,7 @@ export default {
         if (!desc) { toast('Bitte Vereins-Beschreibung eingeben', 'error'); return; }
         genBtn.disabled = true;
         output.classList.remove('hidden');
-        output.innerHTML = '<div class="loader">Gemini denkt nach…</div>';
+        output.innerHTML = '<div class="loader">Claude denkt nach…</div>';
         try {
           suggestion = await generateKontenplan(desc);
           output.innerHTML = `

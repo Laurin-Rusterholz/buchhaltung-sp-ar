@@ -250,7 +250,7 @@ gsutil cors set cors.json gs://jupidu-36804.firebasestorage.app</code></pre>
             <div class="input-group full">
               <label>Datei (PDF, JPG, PNG, …)</label>
               <input name="file" type="file" />
-              ${hasApiKey() ? '<div class="ai-hint"><button type="button" class="ai sm" id="ai-analyze" disabled>✨ Automatisch analysieren</button><span id="ai-status" class="muted small">Datei wählen, dann analysieren</span></div>' : '<div class="ai-hint muted small">Auto-Analyse: Gemini Key in Einstellungen hinterlegen</div>'}
+              ${hasApiKey() ? '<div class="ai-hint"><button type="button" class="ai sm" id="ai-analyze" disabled>✨ Automatisch analysieren</button><span id="ai-status" class="muted small">Datei wählen, dann analysieren</span></div>' : '<div class="ai-hint muted small">Auto-Analyse: Claude Key in Einstellungen hinterlegen</div>'}
             </div>
             <div class="input-group full">
               <label>Bezeichnung</label>
@@ -294,7 +294,7 @@ gsutil cors set cors.json gs://jupidu-36804.firebasestorage.app</code></pre>
           const file = fileInput.files?.[0];
           if (!file) return;
           aiBtn.disabled = true;
-          aiStatus.textContent = 'Gemini analysiert…';
+          aiStatus.textContent = 'Claude analysiert…';
           aiResult.classList.add('hidden');
           try {
             const konten = await api.listKonten();

@@ -1,5 +1,5 @@
 // Schwebendes KI-Chat-Widget unten rechts.
-// Verwendet Gemini (Key aus Einstellungen) und übergibt einen kompakten
+// Verwendet Claude (Key aus Einstellungen) und übergibt einen kompakten
 // Snapshot der Buchhaltungsdaten als Kontext, damit der Chat konkrete
 // Fragen beantworten kann ("wie viel hat Sektion X bezahlt", etc.).
 
@@ -93,7 +93,7 @@ export function initChat() {
     <div class="ai-chat-header">
       <div class="title">
         <strong>✨ Buchhaltungs-Assistent</strong>
-        <span>Powered by Gemini · ${state.einstellungen?.name || 'Verein'}</span>
+        <span>Powered by Claude · ${state.einstellungen?.name || 'Verein'}</span>
       </div>
       <div class="actions">
         <button data-action="clear" title="Verlauf löschen">↻</button>
@@ -124,7 +124,7 @@ export function initChat() {
           Hallo! Ich bin dein Buchhaltungs-Assistent.<br><br>
           Frag mich nach <strong>offenen Rechnungen</strong>, <strong>Salden</strong>, <strong>Sektionsbeiträgen</strong>
           oder lass dir eine <strong>Buchung vorschlagen</strong>.
-          ${!hasApiKey() ? '<br><br>⚠️ Bitte zuerst einen Gemini API-Key in den <strong>Einstellungen</strong> hinterlegen.' : ''}
+          ${!hasApiKey() ? '<br><br>⚠️ Bitte zuerst einen Claude API-Key in den <strong>Einstellungen</strong> hinterlegen.' : ''}
         </div>
       `;
     } else {
@@ -150,7 +150,7 @@ export function initChat() {
     const text = (userText || inputEl.value || '').trim();
     if (!text || isThinking) return;
     if (!hasApiKey()) {
-      history.push({ role: 'assistant', text: '⚠️ Kein Gemini API-Key hinterlegt. Bitte in den **Einstellungen** ergänzen.' });
+      history.push({ role: 'assistant', text: '⚠️ Kein Claude API-Key hinterlegt. Bitte in den **Einstellungen** ergänzen.' });
       renderMessages();
       return;
     }

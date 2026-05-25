@@ -206,7 +206,7 @@ export default {
             <div class="input-group full">
               <label>Beschreibung</label>
               <input name="beschreibung" value="${escapeHtml(b.beschreibung)}" />
-              ${hasApiKey() ? '<div class="ai-hint"><button type="button" class="ai sm" data-ai-suggest>✨ Konten + Betrag vorschlagen</button><span id="ai-status" class="muted small"></span></div>' : '<div class="ai-hint muted small">AI-Vorschläge: Gemini Key in Einstellungen hinterlegen</div>'}
+              ${hasApiKey() ? '<div class="ai-hint"><button type="button" class="ai sm" data-ai-suggest>✨ Konten + Betrag vorschlagen</button><span id="ai-status" class="muted small"></span></div>' : '<div class="ai-hint muted small">AI-Vorschläge: Claude Key in Einstellungen hinterlegen</div>'}
             </div>
             <div class="input-group">
               <label>Soll-Konto</label>

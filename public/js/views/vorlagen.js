@@ -37,7 +37,7 @@ export default {
       <div class="page-header">
         <h2>Vorlagen / Mails</h2>
         <div class="actions">
-          <button class="ai" id="ai-vorlage" ${hasApiKey() ? '' : 'disabled title="Gemini Key in Einstellungen hinterlegen"'}>✨ AI-Vorlage erstellen</button>
+          <button class="ai" id="ai-vorlage" ${hasApiKey() ? '' : 'disabled title="Claude Key in Einstellungen hinterlegen"'}>✨ AI-Vorlage erstellen</button>
           <button class="primary" id="add">+ Neue Vorlage</button>
         </div>
       </div>
@@ -151,7 +151,7 @@ export default {
 
     function openAiVorlage() {
       if (!hasApiKey()) {
-        toast('Gemini API Key fehlt – in Einstellungen hinterlegen', 'error');
+        toast('Claude API Key fehlt – in Einstellungen hinterlegen', 'error');
         return;
       }
       const m = modal({
@@ -183,7 +183,7 @@ export default {
         if (!desc) { toast('Bitte Anforderung eingeben', 'error'); return; }
         genBtn.disabled = true;
         output.classList.remove('hidden');
-        output.innerHTML = '<div class="loader">Gemini denkt nach…</div>';
+        output.innerHTML = '<div class="loader">Claude denkt nach…</div>';
         try {
           suggestion = await generateVorlage(desc, { verein_name: state.einstellungen?.name });
           output.innerHTML = `
