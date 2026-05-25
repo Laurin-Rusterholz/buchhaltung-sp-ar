@@ -191,9 +191,10 @@ Regel:
 Antworte AUSSCHLIESSLICH mit folgendem JSON, ohne Erklärung:
 {
   "datum": "<YYYY-MM-DD, Belegdatum>",
-  "faelligkeit": "<YYYY-MM-DD, Fälligkeitsdatum falls auf Beleg erkennbar (Zahlung bis…), sonst null>",
+  "faelligkeit": "<YYYY-MM-DD. Wenn auf dem Beleg ein Fälligkeits-/Zahlungsziel steht (z.B. 'Zahlbar bis…', 'Fällig am…'), nimm das. Wenn der Beleg bereits BEZAHLT ist (Quittung, 'bezahlt am…', Kassenbon), nimm das Bezahldatum/Belegdatum. Sonst null.>",
   "betrag": <Zahl in CHF, positiv>,
   "vendor": "<Verkäufer / Anbieter>",
+  "beleg_nr": "<Rechnungs-/Belegnummer wie auf dem Beleg gedruckt (z.B. 'R-2026-0123', '1234567'). Wenn keine erkennbar, null.>",
   "beschreibung": "<kurze Beschreibung des Vorgangs>",
   "ist_einnahme": <true wenn Einnahme, false wenn Ausgabe>,
   "konto_soll": "<Kontonummer>",

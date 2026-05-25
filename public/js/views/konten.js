@@ -21,6 +21,7 @@ export default {
         <h2>Kontenplan</h2>
         <div class="actions">
           <button id="export-konten">CSV Export</button>
+          <button id="seed-2026" title="Fehlende Konten aus Budget 2026 ergänzen">📥 Konten 2026 ergänzen</button>
           <button class="ai" id="ai-konten">✨ AI-Vorschlag</button>
           <button id="reset-konten">Zurücksetzen…</button>
           <button class="primary" id="add-konto">+ Neues Konto</button>
@@ -91,6 +92,20 @@ export default {
     };
     container.querySelector('#reset-konten').onclick = () => openReset();
     container.querySelector('#ai-konten').onclick = () => openAi();
+
+    container.querySelector('#seed-2026').onclick = async () => {
+      try {
+        const res = await api.seedKontenplan2026();
+        if (res.added > 0) {
+          toast(`${res.added} fehlende Konten aus Budget 2026 hinzugefügt`, 'success');
+          location.reload();
+        } else {
+          toast('Alle Konten aus Budget 2026 sind bereits vorhanden.', 'info');
+        }
+      } catch (err) {
+        toast('Fehlgeschlagen: ' + err.message, 'error');
+      }
+    };
 
     tbody.addEventListener('click', async (e) => {
       const editNr = e.target?.dataset?.edit;

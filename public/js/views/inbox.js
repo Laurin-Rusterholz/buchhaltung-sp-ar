@@ -7,6 +7,7 @@ import { state, reloadJahre } from '../main.js';
 import { escapeHtml, formatChf, formatDate, todayIso, parseHash } from '../utils.js';
 import { modal, toast, confirmDialog } from '../components.js';
 import { analyzeBelegFromUrl, hasApiKey } from '../ai.js';
+import { startInboxPrefetch, onPrefetchProgress, isPrefetchRunning } from '../inboxPrefetch.js';
 
 // Bestimmt den UI-Status eines Eintrags aus Portal-Status + lokalem Inbox-State.
 function entryStatus(portal, local) {
@@ -40,8 +41,10 @@ export default {
         <h2>Inbox – Eingegangene Belege</h2>
         <div class="actions">
           <button id="refresh">↻ Aktualisieren</button>
+          <button id="prefetch" class="ai">✨ KI-Vorschläge generieren</button>
         </div>
       </div>
+      <div id="prefetch-banner" class="ai-result hidden"></div>
       <div class="card">
         <div class="toolbar">
           <input type="search" id="filter" placeholder="Suchen…" />
@@ -156,6 +159,40 @@ export default {
     filter.oninput = renderRows;
     filterStatus.onchange = renderRows;
     refreshBtn.onclick = loadAll;
+
+    // Prefetch-Banner: zeigt Fortschritt der Hintergrund-KI-Analyse
+    const prefetchBanner = container.querySelector('#prefetch-banner');
+    const prefetchBtn = container.querySelector('#prefetch');
+    function setBanner(html) {
+      if (html) { prefetchBanner.innerHTML = html; prefetchBanner.classList.remove('hidden'); }
+      else prefetchBanner.classList.add('hidden');
+    }
+    const offProgress = onPrefetchProgress((s) => {
+      if (s.phase === 'start') {
+        setBanner(`✨ KI analysiert ${s.total} Beleg${s.total === 1 ? '' : 'e'} im Hintergrund…`);
+      } else if (s.phase === 'progress') {
+        setBanner(`✨ KI: Beleg ${s.current} / ${s.total} – <em>${escapeHtml(s.beleg?.title || s.beleg?.fileName || '…')}</em>`);
+      } else if (s.phase === 'done') {
+        if (s.analyzed > 0) {
+          setBanner(`✓ ${s.analyzed} neue KI-Vorschläge erstellt.`);
+          setTimeout(() => setBanner(''), 4000);
+          loadAll();  // mit den neuen aiResult anzeigen
+        } else {
+          setBanner('');
+        }
+      } else if (s.phase === 'error') {
+        setBanner(`<span style="color:var(--color-danger)">KI-Hintergrund-Fehler: ${escapeHtml(s.error)}</span>`);
+      }
+    });
+    // Cleanup: kein Memory-Leak wenn man die View verlässt
+    container.addEventListener('view-unmount', () => offProgress(), { once: true });
+
+    prefetchBtn.onclick = () => {
+      if (isPrefetchRunning()) { toast('KI läuft schon im Hintergrund…', 'info'); return; }
+      startInboxPrefetch();
+    };
+    // Beim Öffnen der Inbox direkt einen Lauf anstossen (falls neue Belege da sind)
+    setTimeout(() => startInboxPrefetch(), 300);
 
     tbody.addEventListener('click', async (e) => {
       const openId = e.target?.dataset?.open;
@@ -299,6 +336,7 @@ export default {
           }
         };
         setIfEmpty('datum', result.datum);
+        setIfEmpty('beleg_nr', result.beleg_nr);
         setIfEmpty('beschreibung', result.beschreibung || (result.vendor ? `${result.vendor}` : ''));
         if (result.betrag && !fields.querySelector('[name="betrag"]').value) {
           fields.querySelector('[name="betrag"]').value = result.betrag;

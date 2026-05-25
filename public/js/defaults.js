@@ -194,3 +194,68 @@ Mit solidarischen Grüssen
 Vorstand {{verein_name}}`,
   },
 ];
+
+// Zusätzliche Konten gemäss Budget 2026: erweitern den bestehenden Kontenplan
+// ohne bestehende Konten zu verändern. Wird via api.seedKontenplan2026()
+// nach-importiert (Helper fügt nur fehlende Nummern hinzu).
+export const KONTENPLAN_2026_ERGAENZUNGEN = [
+  { nummer: '2730', bezeichnung: 'Zweckgebunden Wahlen 2027', typ: 'passiv', kategorie: 'eigenkapital' },
+  { nummer: '3200', bezeichnung: 'Spenden / Vergabungen (allgemein)', typ: 'ertrag', kategorie: 'spenden' },
+  { nummer: '4220', bezeichnung: 'Fahrspesen Vorstand', typ: 'aufwand', kategorie: 'vorstand' },
+  { nummer: '5002', bezeichnung: 'Fraktion: Sekretariat und diverse Aufwände', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '5003', bezeichnung: 'Löhne AHV-pflichtig', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '5004', bezeichnung: 'Löhne nicht AHV-pflichtig', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '5201', bezeichnung: 'Aus- und Weiterbildung', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '5209', bezeichnung: 'Übriger Personalaufwand', typ: 'aufwand', kategorie: 'personal' },
+  { nummer: '6401', bezeichnung: 'Kampagnen', typ: 'aufwand', kategorie: 'abstimmungen' },
+  { nummer: '6405', bezeichnung: 'Wahlen 2027', typ: 'aufwand', kategorie: 'abstimmungen' },
+  { nummer: '7940', bezeichnung: 'Bankspesen', typ: 'aufwand', kategorie: 'finanz' },
+  { nummer: '7950', bezeichnung: 'Erträge aus Guthaben', typ: 'ertrag', kategorie: 'finanz' },
+  { nummer: '8001', bezeichnung: 'Fondsbewegung SP AR Sekretariat (Mandatskosten)', typ: 'aufwand', kategorie: 'fonds' },
+  { nummer: '8002', bezeichnung: 'Fondsbewegung SP AR Kantonsratsfraktion', typ: 'aufwand', kategorie: 'fonds' },
+  { nummer: '8005', bezeichnung: 'Fondsbewegung Wahlen 2027', typ: 'aufwand', kategorie: 'fonds' },
+];
+
+// Voranschlag 2026 aus dem Excel-Budget. Wird via api.seedVoranschlag2026()
+// als Budget-Dokument für Jahr 2026 abgelegt. Beträge in CHF, positiv;
+// Vorzeichen ergibt sich aus dem Kontotyp.
+export const VORANSCHLAG_2026 = [
+  // === Einnahmen ===
+  { konto: '3001', betrag: 32160, notiz: 'Sektionsbeiträge' },
+  { konto: '3002', betrag: 9600, notiz: 'Beiträge Mandatsträger:innen' },
+  { konto: '3003', betrag: 0, notiz: 'Diverse Zuwendungen Mitglieder' },
+  { konto: '3200', betrag: 0, notiz: 'Spenden / Vergabungen (allgemein)' },
+  { konto: '3201', betrag: 0, notiz: 'Spenden / Vergabungen (Projekte)' },
+  { konto: '3202', betrag: 27000, notiz: 'Abstimmungen / Wahlen 2027' },
+  { konto: '3210', betrag: 0, notiz: 'Einnahmen Veranstaltungen' },
+  { konto: '3211', betrag: 5000, notiz: 'Beitrag Kanton AR z.G.v. SP-Fraktion' },
+  // === Ausgaben Sekretariat ===
+  { konto: '4101', betrag: 300, notiz: 'Materialeinkauf' },
+  { konto: '4105', betrag: 400, notiz: 'Porto' },
+  { konto: '4106', betrag: 300, notiz: 'Diverse Spesen Sekretariat' },
+  // === Vorstand / Veranstaltungen ===
+  { konto: '4210', betrag: 1100, notiz: 'Vorstand und Präsidium' },
+  { konto: '4211', betrag: 2000, notiz: 'Delegiertenversammlungen' },
+  { konto: '4212', betrag: 1000, notiz: 'Parteitage' },
+  { konto: '4219', betrag: 1000, notiz: 'Sonstige Veranstaltungen' },
+  { konto: '4220', betrag: 1500, notiz: 'Fahrspesen Vorstand' },
+  { konto: '4250', betrag: 16000, notiz: 'Mitgliedschaften – SPS' },
+  { konto: '4251', betrag: 500, notiz: 'Mitgliedschaften – sonstige' },
+  // === Personal ===
+  { konto: '5001', betrag: 6000, notiz: 'Mandat Sekretariat SP AR' },
+  { konto: '5002', betrag: 6000, notiz: 'Fraktion: Sekretariat und diverse Aufwände' },
+  { konto: '5201', betrag: 300, notiz: 'Aus- und Weiterbildung' },
+  // === Übriger Aufwand ===
+  { konto: '6210', betrag: 1000, notiz: 'Informatik (Server, Lizenzen etc.)' },
+  { konto: '6220', betrag: 1000, notiz: 'Website / Social Media' },
+  { konto: '6240', betrag: 1000, notiz: 'Drucksachen / Werbematerial' },
+  { konto: '6401', betrag: 2000, notiz: 'Kampagnen' },
+  { konto: '6405', betrag: 10000, notiz: 'Wahlen 2027' },
+  // === Finanzaufwand ===
+  { konto: '7940', betrag: 100, notiz: 'Bankspesen' },
+  { konto: '7950', betrag: -100, notiz: 'Erträge aus Guthaben (negativ = Ertrag)' },
+  // === Fonds ===
+  { konto: '8001', betrag: -1000, notiz: 'Fondsbewegung SP AR Sekretariat' },
+  { konto: '8002', betrag: -1000, notiz: 'Fondsbewegung SP AR Kantonsratsfraktion' },
+  { konto: '8005', betrag: 23360, notiz: 'Fondszuwendung Wahlen 2027' },
+];

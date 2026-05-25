@@ -81,6 +81,7 @@ export default {
             <label class="muted small" style="display:flex;align-items:center;gap:6px">Jahr <select id="budget-jahr">${jahrOptions.join('')}</select></label>
             <span id="save-indicator" class="badge muted">Bereit</span>
             <button class="ai" id="ai-generate" ${hasApiKey() ? '' : 'disabled title="Claude Key in Einstellungen hinterlegen"'}>✨ AI-Voranschlag</button>
+            <button id="import-2026" title="Budget 2026 aus Excel importieren">📥 Budget 2026 importieren</button>
             <button class="primary" id="save-budget">Manuell speichern</button>
           </div>
         </div>
@@ -197,6 +198,33 @@ export default {
 
       // AI-Generierung
       container.querySelector('#ai-generate').onclick = () => openAi();
+
+      // Budget 2026 aus dem Excel-Sheet importieren (idempotent: nur wenn
+      // noch keins existiert oder mit Bestätigung überschreiben).
+      container.querySelector('#import-2026').onclick = async () => {
+        try {
+          let res = await api.seedVoranschlag2026({ overwrite: false });
+          if (!res.written) {
+            const ok = await confirmDialog(
+              'Budget 2026 existiert bereits. Mit Excel-Daten überschreiben?',
+              { confirmLabel: 'Überschreiben', danger: true },
+            );
+            if (!ok) return;
+            res = await api.seedVoranschlag2026({ overwrite: true });
+          }
+          toast(
+            `Budget 2026 importiert: ${res.positionen} Positionen` +
+            (res.kontenAdded ? `, ${res.kontenAdded} neue Konten` : '') +
+            (res.skipped ? `, ${res.skipped} ohne passendes Konto übersprungen` : ''),
+            'success'
+          );
+          // View neu laden, damit das Jahr 2026 angezeigt wird
+          location.hash = '#voranschlag';
+          location.reload();
+        } catch (err) {
+          toast('Import fehlgeschlagen: ' + err.message, 'error');
+        }
+      };
     };
 
     function renderTable(kontenList, pmap, hYears) {

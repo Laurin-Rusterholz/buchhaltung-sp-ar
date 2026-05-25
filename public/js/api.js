@@ -2,7 +2,7 @@
 // Stellt die gleiche Schnittstelle bereit, die alle Views verwenden.
 
 import { readJson, writeJson, uploadFile, deleteFile } from './firebase.js';
-import { DEFAULT_EINSTELLUNGEN, DEFAULT_KONTENPLAN, DEFAULT_VORLAGEN, BELEG_PORTAL_URL } from './defaults.js';
+import { DEFAULT_EINSTELLUNGEN, DEFAULT_KONTENPLAN, DEFAULT_VORLAGEN, BELEG_PORTAL_URL, KONTENPLAN_2026_ERGAENZUNGEN, VORANSCHLAG_2026 } from './defaults.js';
 import { bilanz, erfolgsrechnung, kontoauszug } from './accounting.js';
 
 function uid(prefix = '') {
@@ -73,6 +73,25 @@ export const api = {
     if (!Array.isArray(konten)) throw new Error('konten muss ein Array sein');
     await writeJson('kontenplan', konten);
     return konten;
+  },
+  // Ergänzt den Kontenplan um die Konten aus Budget 2026 – nur fehlende
+  // Konten werden hinzugefügt, bestehende bleiben unverändert (Buchungen
+  // referenzieren sie ggf. schon).
+  seedKontenplan2026: async () => {
+    const list = await api.listKonten();
+    const existing = new Set(list.map((k) => String(k.nummer)));
+    let added = 0;
+    for (const k of KONTENPLAN_2026_ERGAENZUNGEN) {
+      if (!existing.has(String(k.nummer))) {
+        list.push(k);
+        added++;
+      }
+    }
+    if (added > 0) {
+      list.sort((a, b) => String(a.nummer).localeCompare(String(b.nummer)));
+      await writeJson('kontenplan', list);
+    }
+    return { added, total: list.length };
   },
 
   // ===== Geschäftsjahre =====
@@ -239,6 +258,27 @@ export const api = {
   deleteBudget: async (jahr) => {
     await writeJson(`budget-${jahr}`, null);
     return { ok: true };
+  },
+  // Importiert das Budget 2026 aus dem Excel-Sheet. Sorgt zuerst dafür, dass
+  // alle Konten im Plan existieren (seedKontenplan2026), dann speichert die
+  // Positionen unter budget-2026. Liefert ein Resultat mit Diagnose.
+  seedVoranschlag2026: async ({ overwrite = false } = {}) => {
+    const existing = await api.getBudget(2026);
+    if (existing && !overwrite) {
+      return { written: false, reason: 'Budget 2026 existiert bereits – overwrite nicht gesetzt.' };
+    }
+    const kontoSeed = await api.seedKontenplan2026();
+    const konten = await api.listKonten();
+    const kontoSet = new Set(konten.map((k) => String(k.nummer)));
+    const valid = VORANSCHLAG_2026.filter((p) => kontoSet.has(String(p.konto)));
+    const skipped = VORANSCHLAG_2026.length - valid.length;
+    const budget = await api.saveBudget(2026, valid, 'Importiert aus Excel-Budget 2026 (SP AR).');
+    // Sicherstellen, dass Geschäftsjahr 2026 existiert
+    const jahre = await api.listJahre();
+    if (!jahre.find((j) => j.jahr === 2026)) {
+      try { await api.saveJahr({ jahr: 2026 }); } catch {}
+    }
+    return { written: true, kontenAdded: kontoSeed.added, positionen: valid.length, skipped, budget };
   },
 
   // ===== Rechnungen (pro Geschäftsjahr) =====

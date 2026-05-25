@@ -6,6 +6,7 @@ import { $, currentYear } from './utils.js';
 import { toast } from './components.js';
 import { DEFAULT_EINSTELLUNGEN } from './defaults.js';
 import { initChat } from './chat.js';
+import { startInboxPrefetch } from './inboxPrefetch.js';
 
 import dashboard from './views/dashboard.js';
 import inbox from './views/inbox.js';
@@ -144,4 +145,10 @@ register('einstellungen', einstellungen);
 bootstrap().then(() => {
   start();
   initChat();
+  // Hintergrund-KI: alle neuen Belege ohne KI-Vorschlag werden direkt analysiert
+  // und das Ergebnis wird in Firestore persistiert. Beim nächsten Öffnen der
+  // Inbox sind die Vorschläge schon da.
+  setTimeout(() => startInboxPrefetch(), 1500);
+  // Alle 5 Min nachschauen, ob neue Belege eingetroffen sind.
+  setInterval(() => startInboxPrefetch(), 5 * 60 * 1000);
 });
