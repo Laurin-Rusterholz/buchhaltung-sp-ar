@@ -3,6 +3,7 @@ import { state } from '../main.js';
 import { escapeHtml, formatChf, formatDate, todayIso, downloadFile, toCsv, parseHash } from '../utils.js';
 import { modal, toast, confirmDialog, enhanceSelect } from '../components.js';
 import { suggestBuchung, hasApiKey } from '../ai.js';
+import { generateBuchungsDossier } from '../dossier.js';
 
 export default {
   async render(container, params = {}) {
@@ -21,6 +22,7 @@ export default {
         <h2>Buchungen ${jahr}</h2>
         <div class="actions">
           <button id="export-csv">CSV Export</button>
+          <button id="dossier">📦 Buchungs-Dossier (PDF/Monat)</button>
           <button class="primary" id="add-buchung">+ Neue Buchung</button>
         </div>
       </div>
@@ -121,6 +123,8 @@ export default {
 
     container.querySelector('#add-buchung').onclick = () => openForm();
 
+    container.querySelector('#dossier').onclick = () => openDossierExport();
+
     // Falls eine vorbefüllte Buchung wartet (z.B. nach AI-Beleg-Analyse) → Formular öffnen
     if (state.pendingBuchung) {
       const pending = state.pendingBuchung;
@@ -171,6 +175,88 @@ export default {
         e.target.checked = !checked;
       }
     });
+
+    // Buchungs-Dossier: pro Monat ein zusammengeführtes PDF mit allen Belegen,
+    // sortiert nach Buchungsdatum. Auswahl: einzelnes Jahr oder alle Jahre.
+    function openDossierExport() {
+      const jahre = state.jahre.slice().sort((a, b) => b.jahr - a.jahr);
+      const jahrOptions = jahre.length === 0
+        ? `<option value="${state.aktuellesJahr}">${state.aktuellesJahr}</option>`
+        : jahre.map((j) => `<option value="${j.jahr}"${j.jahr === state.aktuellesJahr ? ' selected' : ''}>${j.jahr}</option>`).join('');
+
+      const m = modal({
+        title: '📦 Buchungs-Dossier exportieren',
+        body: `
+          <p class="muted small">
+            Erstellt pro Monat ein <strong>zusammengeführtes PDF</strong> mit allen Belegen,
+            sortiert nach Buchungsdatum. PDF-Belege werden gemergt, Bilder (JPG/PNG) als
+            ganze Seite eingebettet. Belege in anderen Formaten (HEIC, WebP, DOCX, …)
+            landen als Original-Datei im Unterordner <code>extras/</code>.
+          </p>
+          <div class="form-grid">
+            <div class="input-group">
+              <label>Geschäftsjahr</label>
+              <select id="dossier-jahr">
+                ${jahrOptions}
+                <option value="__all__">Alle Jahre</option>
+              </select>
+            </div>
+          </div>
+          <div id="dossier-status" class="muted small mt-4 hidden">Wird vorbereitet…</div>
+          <progress id="dossier-bar" value="0" max="1" class="hidden" style="width:100%;margin-top:8px"></progress>
+          <div id="dossier-result" class="ai-result mt-4 hidden"></div>
+        `,
+        footer: `<button data-cancel>Abbrechen</button><button class="primary" id="dossier-start">Export starten</button>`,
+      });
+      const jahrSel = m.bodyEl.querySelector('#dossier-jahr');
+      const statusEl = m.bodyEl.querySelector('#dossier-status');
+      const barEl = m.bodyEl.querySelector('#dossier-bar');
+      const resultEl = m.bodyEl.querySelector('#dossier-result');
+      const startBtn = m.footerEl.querySelector('#dossier-start');
+      m.footerEl.querySelector('[data-cancel]').onclick = m.close;
+
+      startBtn.onclick = async () => {
+        const val = jahrSel.value;
+        const ziele = val === '__all__'
+          ? (jahre.length ? jahre.map((j) => j.jahr) : [state.aktuellesJahr])
+          : [Number(val)];
+        startBtn.disabled = true;
+        statusEl.classList.remove('hidden');
+        barEl.classList.remove('hidden');
+        resultEl.classList.add('hidden');
+        try {
+          const { blob, stats } = await generateBuchungsDossier({
+            jahre: ziele,
+            onProgress: (s) => {
+              if (s.message) statusEl.textContent = s.message;
+              if (s.phase === 'fetch' && s.total) barEl.value = s.current / s.total;
+              if (s.phase === 'zip-progress') barEl.value = 1;
+            },
+          });
+          const filename = `Buchungs-Dossier-${ziele.length === 1 ? ziele[0] : 'alle'}.zip`;
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(a.href);
+          statusEl.textContent = '✓ Fertig!';
+          resultEl.innerHTML = `
+            <strong>Export erstellt:</strong> ${filename}<br>
+            ${stats.gruppen} Monats-PDFs · ${stats.belege} Belege eingebettet
+            ${stats.extras > 0 ? `· ${stats.extras} Original-Dateien in extras/` : ''}
+            ${stats.failed > 0 ? `· <span style="color:var(--color-danger)">${stats.failed} fehlgeschlagen</span>` : ''}
+          `;
+          resultEl.classList.remove('hidden');
+          toast('Buchungs-Dossier heruntergeladen', 'success');
+        } catch (err) {
+          statusEl.innerHTML = `<span style="color:var(--color-danger)">Fehler: ${escapeHtml(err.message)}</span>`;
+          toast(err.message, 'error');
+        }
+        startBtn.disabled = false;
+      };
+    }
 
     function openForm(buchung, prefill) {
       const isNew = !buchung;

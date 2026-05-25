@@ -538,7 +538,13 @@ export default {
         if (aiResult) {
           applyAi(aiResult);
           const stale = isStaleCache(aiResult);
-          aiStatus.innerHTML = `KI-Analyse aus Cache: <strong>${escapeHtml(aiResult.vendor || aiResult.beschreibung || '—')}</strong>${aiResult.ist_einnahme ? ' (Einnahme)' : ' (Ausgabe)'}.${stale ? ' <span style="color:var(--color-warning);font-weight:600">⚠ veraltet – bitte "↻ Neu analysieren" klicken</span>' : ''}`;
+          if (aiResult.ist_beleg === false) {
+            aiStatus.innerHTML = `<span style="color:var(--color-warning);font-weight:600">⚠ Das hochgeladene Dokument scheint kein Buchhaltungsbeleg zu sein.</span>` +
+              (aiResult.begruendung ? `<div class="muted small mt-2">${escapeHtml(aiResult.begruendung)}</div>` : '');
+          } else {
+            aiStatus.innerHTML = `KI-Analyse aus Cache: <strong>${escapeHtml(aiResult.vendor || aiResult.beschreibung || '—')}</strong>${aiResult.ist_einnahme ? ' (Einnahme)' : ' (Ausgabe)'}.${stale ? ' <span style="color:var(--color-warning);font-weight:600">⚠ veraltet – bitte "↻ Neu analysieren" klicken</span>' : ''}` +
+              (aiResult.begruendung ? `<div class="muted small mt-2"><strong>Begründung:</strong> ${escapeHtml(aiResult.begruendung)}</div>` : '');
+          }
         } else {
           runAi();
         }

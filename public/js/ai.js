@@ -277,10 +277,11 @@ Geh in dieser Reihenfolge vor:
 
 ## Antwort-Format (AUSSCHLIESSLICH dieses JSON, ohne Erklärung drumherum):
 {
-  "datum": "<YYYY-MM-DD, Belegdatum>",
+  "ist_beleg": <true wenn das Dokument tatsächlich ein Buchhaltungsbeleg (Rechnung, Quittung, Kontoauszug, Bankbeleg) ist. false wenn es etwas anderes ist (Schulaufgabe, Briefkopf, Dossier, Notiz, Werbung). Default true.>,
+  "datum": "<YYYY-MM-DD, Belegdatum, oder null>",
   "faelligkeit": "<YYYY-MM-DD. Wenn auf dem Beleg ein Fälligkeits-/Zahlungsziel steht (z.B. 'Zahlbar bis…', 'Fällig am…'), nimm das. Wenn der Beleg bereits BEZAHLT ist (Quittung, 'bezahlt am…', Kassenbon), nimm das Bezahldatum/Belegdatum. Sonst null.>",
-  "betrag": <Zahl in CHF, positiv>,
-  "vendor": "<Verkäufer / Anbieter>",
+  "betrag": <Zahl in CHF, positiv, oder null>,
+  "vendor": "<Verkäufer / Anbieter, oder null>",
   "beleg_nr": "<Rechnungs-/Belegnummer wie auf dem Beleg gedruckt (z.B. 'R-2026-0123', '1234567'). Wenn keine erkennbar, null.>",
   "beschreibung": "<kurze Beschreibung des Vorgangs, der den Anlass / Verwendungszweck nennt – nicht nur den Vendor>",
   "ist_einnahme": <true wenn Einnahme, false wenn Ausgabe>,
@@ -301,13 +302,35 @@ ${summarizeBuchungen(buchungen, konten) ? `## Bisherige Buchungen (Lerne aus die
 
 Verwende AUSSCHLIESSLICH Kontonummern aus den obigen Listen.
 
-WICHTIG: Wenn du ein Sammelkonto ("Sonstig…", "Übrig…", "Divers…") wählst, prüfe nochmal ob nicht doch ein spezifisches Konto besser passt. Das ist der häufigste Fehler – falle nicht darauf zurück.`;
+WICHTIG: Wenn du ein Sammelkonto ("Sonstig…", "Übrig…", "Divers…") wählst, prüfe nochmal ob nicht doch ein spezifisches Konto besser passt. Das ist der häufigste Fehler – falle nicht darauf zurück.
+
+ABSOLUT WICHTIG: Antworte IMMER mit dem JSON-Schema – auch wenn das Dokument KEIN Buchhaltungsbeleg ist (z.B. Schulaufgabe, Notiz, Briefkopf, Dossier). In dem Fall:
+- "ist_beleg": false setzen (sonst weglassen / true)
+- Felder nach bestem Wissen ausfüllen (alle dürfen null sein wenn nicht erkennbar)
+- "begruendung" enthält Erklärung was das Dokument ist und warum es kein Beleg ist
+NIE Klartext zurückgeben. NIE die Antwort verweigern. IMMER das JSON-Schema befüllen.`;
 
   const text = await callClaude([
     { text: prompt },
     { inline_data: { mime_type: mimeType, data: base64Data } },
   ]);
-  const result = extractJson(text);
+  let result;
+  try {
+    result = extractJson(text);
+  } catch (err) {
+    // KI hat trotz Anweisung Klartext geliefert (z.B. "Das ist kein Beleg").
+    // Wir bauen ein leeres Result mit der Erklärung als begruendung – so
+    // wird der Beleg im Cache als "nicht buchbar" markiert und der
+    // Prefetch fällt nicht mehr darauf.
+    result = {
+      ist_beleg: false,
+      datum: null, faelligkeit: null, betrag: null, vendor: null,
+      beleg_nr: null, beschreibung: null, ist_einnahme: null,
+      bezahlt: false, konto_soll: null, konto_haben: null,
+      tags: '',
+      begruendung: text.trim().slice(0, 500),
+    };
+  }
   // Backward-Compat-Feld
   result.konto_vorschlag = result.konto_soll || result.konto_vorschlag;
   return result;
