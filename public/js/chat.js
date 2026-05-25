@@ -3,10 +3,10 @@
 // Snapshot der Buchhaltungsdaten als Kontext, damit der Chat konkrete
 // Fragen beantworten kann ("wie viel hat Sektion X bezahlt", etc.).
 
-import { api } from './api.js';
 import { state } from './main.js';
-import { escapeHtml, formatChf } from './utils.js';
+import { escapeHtml } from './utils.js';
 import { chat, hasApiKey } from './ai.js';
+import { renderMarkdown, buildSystemContext } from './chatContext.js';
 
 const HISTORY_KEY = 'buchhaltung_chat_history';
 const SUGGESTIONS = [
@@ -23,58 +23,6 @@ function loadHistory() {
 }
 function saveHistory(history) {
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(-30))); } catch {}
-}
-
-// Sehr leichtgewichtiger Markdown-Renderer (Fett, Italic, Code, Linien, Listen).
-function renderMarkdown(text) {
-  let html = escapeHtml(text);
-  // Code-Blöcke
-  html = html.replace(/```([\s\S]*?)```/g, (_, code) => `<pre>${code}</pre>`);
-  // Inline-Code
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-  // Bold + Italic
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
-  // Listenzeilen
-  html = html.replace(/(^|\n)[*-] (.+)/g, '$1<li>$2</li>');
-  html = html.replace(/(<li>.*?<\/li>(\s*<li>.*?<\/li>)*)/gs, '<ul>$1</ul>');
-  // Zeilenumbrüche
-  html = html.replace(/\n/g, '<br>');
-  return html;
-}
-
-// Erstellt einen kompakten, aber informativen Snapshot für den KI-Kontext.
-async function buildSystemContext() {
-  const jahr = state.aktuellesJahr;
-  try {
-    const [konten, buchungen, sektionen, rechnungen, einst] = await Promise.all([
-      api.listKonten(),
-      api.listBuchungen(jahr),
-      api.listSektionen(),
-      api.listRechnungen(jahr),
-      api.getEinstellungen(),
-    ]);
-    const lines = [];
-    lines.push(`Verein: ${einst.name || '—'} (${einst.untertitel || ''})`);
-    lines.push(`Aktuelles Geschäftsjahr: ${jahr}`);
-    lines.push('');
-    lines.push('## Kontenplan (Auszug, Nr / Bezeichnung / Typ)');
-    konten.forEach((k) => lines.push(`- ${k.nummer} ${k.bezeichnung} [${k.typ}]`));
-    lines.push('');
-    lines.push(`## Buchungen ${jahr} (insgesamt ${buchungen.length})`);
-    const recent = buchungen.slice().sort((a, b) => (b.datum || '').localeCompare(a.datum || '')).slice(0, 25);
-    recent.forEach((b) => lines.push(`- ${b.datum} | ${b.beleg_nr || ''} | ${b.soll}→${b.haben} | CHF ${formatChf(b.betrag)} | ${b.beschreibung}${b.bezahlt ? ' [bezahlt]' : ''}`));
-    if (buchungen.length > 25) lines.push(`(... ${buchungen.length - 25} weitere Buchungen)`);
-    lines.push('');
-    lines.push(`## Rechnungen ${jahr} (${rechnungen.length})`);
-    rechnungen.slice(0, 30).forEach((r) => lines.push(`- ${r.nummer} | ${r.datum} | ${r.empfaenger_name} | CHF ${formatChf(r.total)} | Status: ${r.status}${r.faellig_am ? ' | fällig ' + r.faellig_am : ''}`));
-    lines.push('');
-    lines.push(`## Sektionen (${sektionen.length})`);
-    sektionen.forEach((s) => lines.push(`- ${s.name} | ${s.anzahl_mitglieder || 0} Mitglieder × CHF ${s.beitrag_pro_mitglied || 0} = CHF ${formatChf((s.anzahl_mitglieder || 0) * (s.beitrag_pro_mitglied || 0))}`));
-    return lines.join('\n');
-  } catch (e) {
-    return `(Kontext konnte nicht geladen werden: ${e.message})`;
-  }
 }
 
 export function initChat() {

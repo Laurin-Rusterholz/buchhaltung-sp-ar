@@ -9,6 +9,7 @@ import { initChat } from './chat.js';
 import { startInboxPrefetch } from './inboxPrefetch.js';
 
 import dashboard from './views/dashboard.js';
+import assistent from './views/assistent.js';
 import inbox from './views/inbox.js';
 import buchungen from './views/buchungen.js';
 import konten from './views/konten.js';
@@ -130,6 +131,7 @@ export async function reloadJahre() {
 
 // Routen registrieren
 register('dashboard', dashboard);
+register('assistent', assistent);
 register('inbox', inbox);
 register('buchungen', buchungen);
 register('konten', konten);

@@ -700,6 +700,37 @@ export const api = {
     return { ok: true };
   },
 
+  // ===== Chat-Assistent: Sessions in Firestore =====
+  // Eine Session: { id, title, messages: [{role, text, ts}], createdAt, updatedAt }
+  listChatSessions: async () => {
+    const map = await readJson('chat-sessions', {});
+    return Object.values(map).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+  },
+  getChatSession: async (id) => {
+    const map = await readJson('chat-sessions', {});
+    return map[id] || null;
+  },
+  saveChatSession: async (session) => {
+    if (!session?.id) throw new Error('Session braucht eine ID');
+    const map = await readJson('chat-sessions', {});
+    map[session.id] = {
+      ...session,
+      messages: Array.isArray(session.messages) ? session.messages : [],
+      updatedAt: new Date().toISOString(),
+      createdAt: session.createdAt || new Date().toISOString(),
+    };
+    await writeJson('chat-sessions', map);
+    return map[session.id];
+  },
+  deleteChatSession: async (id) => {
+    const map = await readJson('chat-sessions', {});
+    if (map[id]) {
+      delete map[id];
+      await writeJson('chat-sessions', map);
+    }
+    return { ok: true };
+  },
+
   // ===== Berichte (lokal berechnet) =====
   bilanz: async (jahr) => {
     const [konten, buchungen, einstellungen] = await Promise.all([
