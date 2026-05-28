@@ -28,6 +28,16 @@ function paidBadge(paid) {
     : '<span class="badge danger">Offen</span>';
 }
 
+// EINZIGE Quelle der Wahrheit für den Bezahlt-Status eines Inbox-Belegs.
+// Priorität: gespeicherter Draft → KI-Analyse → Portal-Angabe des Einreichers.
+// Wird in der Liste, im Pop-up-Badge und im Verbuchen-Formular identisch
+// verwendet, damit die Anzeige nie widersprüchlich ist.
+function resolveBezahlt(local, portal) {
+  if (local?.draft && typeof local.draft.bezahlt === 'boolean') return local.draft.bezahlt;
+  if (local?.aiResult && typeof local.aiResult.bezahlt === 'boolean') return local.aiResult.bezahlt;
+  return !!portal?.paid;
+}
+
 function fileIcon(mime, name = '') {
   if ((mime || '').startsWith('image/')) return '🖼️';
   if ((mime || '').includes('pdf') || /\.pdf$/i.test(name)) return '📄';
@@ -132,7 +142,7 @@ export default {
         const eingang = p.submittedAt || p.createdAt;
         const draftAmount = local?.draft?.betrag ?? p.amount;
         const draftDue = local?.draft?.faellig_am || p.dueDate || '';
-        const paid = local?.draft?.bezahlt ?? p.paid;
+        const paid = resolveBezahlt(local, p);
         const fileLink = p.firebaseUrl && p.firebaseUrl.startsWith('http')
           ? `<a href="${escapeHtml(p.firebaseUrl)}" target="_blank" rel="noopener">${fileIcon(p.fileType, p.fileName)} ${escapeHtml(p.fileName || 'Beleg')}</a>`
           : '<span class="muted small">—</span>';
@@ -322,6 +332,7 @@ export default {
       konten.sort((a, b) => a.nummer.localeCompare(b.nummer));
       const kontoMap = new Map(konten.map((k) => [k.nummer, k]));
 
+      let aiResult = local?.aiResult || null;
       const initialDraft = local?.draft || {
         datum: portal.submittedAt ? portal.submittedAt.slice(0, 10) : todayIso(),
         beleg_nr: '',
@@ -329,10 +340,9 @@ export default {
         soll: '',
         haben: '',
         betrag: Number(portal.amount) > 0 ? Number(portal.amount) : '',
-        bezahlt: !!portal.paid,
+        bezahlt: resolveBezahlt(local, portal),
         faellig_am: portal.dueDate || '',
       };
-      let aiResult = local?.aiResult || null;
 
       const optionsKonten = konten
         .map((k) => `<option value="${escapeHtml(k.nummer)}">${escapeHtml(k.nummer)} ${escapeHtml(k.bezeichnung)}</option>`)
@@ -354,7 +364,7 @@ export default {
           <div class="card" style="background:var(--color-bg);margin-bottom:16px">
             <div class="flex between center" style="margin-bottom:6px">
               <strong>Beleg aus sp-ar-belege</strong>
-              ${paidBadge(!!portal.paid)}
+              <span id="paid-badge">${paidBadge(initialDraft.bezahlt)}</span>
             </div>
             <div class="small muted">Eingereicht ${escapeHtml(formatDate(portal.submittedAt || portal.createdAt))}${portal.name && portal.name !== 'Unbekannt' ? ` von ${escapeHtml(portal.name)}` : ''}</div>
             <div style="margin-top:6px">${fileLinkInline}</div>
@@ -420,8 +430,10 @@ export default {
       const verbuchenBtn = m.footerEl.querySelector('[data-verbuchen]');
       const saveBtn = m.footerEl.querySelector('[data-save]');
 
+      const paidBadgeEl = m.bodyEl.querySelector('#paid-badge');
       bezahltCb.onchange = () => {
         verbuchenBtn.disabled = !bezahltCb.checked;
+        if (paidBadgeEl) paidBadgeEl.innerHTML = paidBadge(bezahltCb.checked);
       };
 
       function applyAi(result) {
@@ -454,22 +466,30 @@ export default {
         if (result.konto_haben && kontoMap.get(result.konto_haben) && !fields.querySelector('[name="haben"]').value) {
           fields.querySelector('[name="haben"]').value = result.konto_haben;
         }
-        // Bezahlt: explizit aus KI (neueres Schema) ODER implizit erkennen
-        // anhand des Haben-Kontos. Wenn das Haben-Konto ein Aktivkonto
-        // (Bank/Kasse) ist, wurde direkt bezahlt – das gilt sowohl für
-        // Quittungen als auch für Banküberweisungen aus dem Kontoauszug.
+        // Bezahlt-Status setzen – result.bezahlt hat bereits die Fälligkeits-
+        // Heuristik durchlaufen (Zukunfts-Fälligkeit ⇒ nicht bezahlt). Als
+        // Ergänzung: wenn das Haben-Konto ein echtes Zahlungsmittel (Bank/
+        // Kasse, kategorie 'liquid') ist, wurde direkt bezahlt. NICHT bei
+        // Forderungen/Verbindlichkeiten (die bedeuten gerade offen).
+        // ABER: nur bei Erstanalyse. Sobald ein Draft gespeichert wurde, hat
+        // der User den Status ggf. bewusst gesetzt – dann nicht überschreiben
+        // (initialDraft.bezahlt enthält bereits den gespeicherten Wert).
         const bezahltCb = fields.querySelector('[name="bezahlt"]');
-        if (bezahltCb && !bezahltCb.checked) {
-          let shouldCheck = false;
-          if (result.bezahlt === true) shouldCheck = true;
-          else {
+        if (bezahltCb && !local?.draft) {
+          let bezahlt = result.bezahlt === true;
+          if (!bezahlt) {
             const habenNr = fields.querySelector('[name="haben"]').value || result.konto_haben;
             const habenKto = habenNr ? kontoMap.get(habenNr) : null;
-            if (habenKto?.typ === 'aktiv') shouldCheck = true;
+            if (habenKto?.kategorie === 'liquid') bezahlt = true;
           }
-          if (shouldCheck) {
-            bezahltCb.checked = true;
-            // Verbuchen-Button-State neu setzen
+          // Fälligkeit in der Zukunft ⇒ definitiv offen (override)
+          const faelligVal = fields.querySelector('[name="faellig_am"]').value;
+          if (bezahlt && faelligVal) {
+            const f = new Date(faelligVal); const h = new Date(); h.setHours(0, 0, 0, 0);
+            if (!isNaN(f.getTime()) && f > h) bezahlt = false;
+          }
+          if (bezahltCb.checked !== bezahlt) {
+            bezahltCb.checked = bezahlt;
             bezahltCb.dispatchEvent(new Event('change'));
           }
         }

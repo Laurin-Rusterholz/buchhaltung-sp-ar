@@ -340,6 +340,16 @@ NIE Klartext zurückgeben. NIE die Antwort verweigern. IMMER das JSON-Schema bef
                    'bezahlt', 'ist_beleg']) {
     if (result[k] === undefined) result[k] = null;
   }
+  // Plausibilitäts-Heuristik: eine Rechnung mit Fälligkeit/Zahlungsziel in
+  // der ZUKUNFT kann noch nicht bezahlt sein (sonst gäbe es kein offenes
+  // Zahlungsziel). Korrigiert häufige KI-Fehleinschätzung.
+  if (result.bezahlt === true && result.faelligkeit) {
+    const faellig = new Date(result.faelligkeit);
+    const heute = new Date(); heute.setHours(0, 0, 0, 0);
+    if (!isNaN(faellig.getTime()) && faellig > heute) {
+      result.bezahlt = false;
+    }
+  }
   return result;
 }
 

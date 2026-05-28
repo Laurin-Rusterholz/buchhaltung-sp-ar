@@ -108,7 +108,8 @@ function buildDraftFromAi(portal, ai) {
     soll: ai?.konto_soll || '',
     haben: ai?.konto_haben || '',
     betrag: ai?.betrag || (Number(portal.amount) > 0 ? Number(portal.amount) : ''),
-    bezahlt: !!portal.paid,
+    // KI-Erkennung hat Vorrang vor der Einreicher-Angabe (sie sieht den Beleg).
+    bezahlt: typeof ai?.bezahlt === 'boolean' ? ai.bezahlt : !!portal.paid,
     faellig_am: ai?.faelligkeit || portal.dueDate || '',
   };
 }
