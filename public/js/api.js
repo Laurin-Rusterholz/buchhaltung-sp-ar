@@ -691,6 +691,23 @@ export const api = {
     }
     return r.json();
   },
+  // Löscht einen Beleg endgültig aus dem Portal (für Duplikate). Entfernt
+  // zusätzlich den lokalen Inbox-State-Eintrag.
+  deletePortalBeleg: async (spArId) => {
+    const url = `${BELEG_PORTAL_URL}/.netlify/functions/beleg-list?action=delete`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: spArId }),
+    });
+    if (!r.ok) {
+      let msg = `Portal-Löschung fehlgeschlagen (${r.status})`;
+      try { const e = await r.json(); msg = e.error || msg; } catch {}
+      throw new Error(msg);
+    }
+    try { await api.deleteInboxEntry(spArId); } catch {}
+    return r.json();
+  },
   // Lokaler Inbox-State (Firestore): pro sp-ar-belege-ID ein Objekt mit
   // KI-Analyse, Draft, Buchungs-Referenz.
   getInboxState: () => readJson('inbox-state', {}),

@@ -161,6 +161,7 @@ export default {
             <td>${fileLink}</td>
             <td class="right">
               <button class="sm primary" data-open="${escapeHtml(p.id)}">${status === 'abgeschlossen' ? 'Ansehen' : 'Verbuchen'}</button>
+              <button class="sm danger" data-delete="${escapeHtml(p.id)}" title="Beleg aus der Inbox löschen (z.B. Duplikat)">🗑</button>
             </td>
           </tr>
         `;
@@ -208,6 +209,30 @@ export default {
     setTimeout(() => startInboxPrefetch(), 300);
 
     tbody.addEventListener('click', async (e) => {
+      // Löschen (vor dem Öffnen prüfen)
+      const deleteId = e.target?.dataset?.delete;
+      if (deleteId) {
+        const portal = portalBelege.find((p) => p.id === deleteId);
+        const local = inboxState[deleteId];
+        if (local?.buchungId) {
+          toast('Dieser Beleg ist bereits verbucht und kann nicht gelöscht werden.', 'error');
+          return;
+        }
+        const ok = await confirmDialog(
+          `Beleg "${portal?.title || portal?.fileName || deleteId}" wirklich aus der Inbox löschen? Das entfernt ihn auch im Einreichungs-Portal.`,
+        );
+        if (!ok) return;
+        try {
+          await api.deletePortalBeleg(deleteId);
+          portalBelege = portalBelege.filter((p) => p.id !== deleteId);
+          delete inboxState[deleteId];
+          renderRows();
+          toast('Beleg gelöscht', 'success');
+        } catch (err) {
+          toast('Löschen fehlgeschlagen: ' + err.message, 'error');
+        }
+        return;
+      }
       // Klick auf den Verbuchen-Button (Standardfall)
       const openId = e.target?.dataset?.open;
       if (openId) { await openEntry(openId); return; }
